@@ -7,6 +7,7 @@ node_modules/
 .env
 .env.local
 .env.*.local
+!.env.example
 
 # Build outputs
 dist/
@@ -29,4 +30,11 @@ Thumbs.db
 
 # Test coverage
 coverage/
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
+
+# Terminal files
+terminals/
 

@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PartnerType {
+  VC
+  CORPORATE
+  COMMUNITY_BUILDER
+  ANGEL
+  OTHER
+}
+
+enum OnboardingStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum OutreachStatus {
+  PENDING
+  APPROVED
+  SENT
+  SKIPPED
+  DELETED
+}
+
+enum DigestStatus {
+  DRAFT
+  APPROVED
+  SENT
+}
+
+// Partner profiles populated from AI onboarding
+model Partner {
+  id                    String        @id @default(uuid())
+  slackUserId           String        @unique @map("slack_user_id")
+  slackHandle           String?       @map("slack_handle")
+  name                  String
+  email                 String?
+  firm                  String
+  role                  String?
+  partnerType           PartnerType   @map("partner_type")
+  
+  // Investment/Partnership details
+  sectors               String[]      @default([])
+  stageFocus            String[]      @default([]) @map("stage_focus")
+  checkSize             String?       @map("check_size")
+  geographicFocus       String[]      @default([]) @map("geographic_focus")
+  
+  // Profile details
+  idealFounderProfile   String?       @map("ideal_founder_profile")
+  engagementPreferences String[]      @default([]) @map("engagement_preferences")
+  contributionOffers    String[]      @default([]) @map("contribution_offers")
+  goalsFromCommunity    String?       @map("goals_from_community")
+  linkedinUrl           String?       @map("linkedin_url")
+  
+  // Onboarding
+  onboardingComplete    Boolean       @default(false) @map("onboarding_complete")
+  onboardingData        Json?         @map("onboarding_data")
+  
+  // Relationships
+  conversations         OnboardingConversation[]
+  outreachMessages      OutreachMessage[]
+  
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+
+  @@map("partners")
+}
+
+// Multi-turn onboarding conversation state
+model OnboardingConversation {
+  id            String            @id @default(uuid())
+  partnerId     String?           @map("partner_id")
+  partner       Partner?          @relation(fields: [partnerId], references: [id])
+  slackUserId   String            @map("slack_user_id")
+  messages      Json              @default("[]") // Array of {role, content, timestamp}
+  extractedData Json?             @map("extracted_data") // Partial data as conversation progresses
+  status        OnboardingStatus  @default(PENDING)
+  
+  startedAt     DateTime          @default(now()) @map("started_at")
+  completedAt   DateTime?         @map("completed_at")
+
+  @@map("onboarding_conversations")
+}
+
+// Events for outreach
+model Event {
+  id                  String            @id @default(uuid())
+  name                String
+  eventType           String            @map("event_type")
+  dateTime            DateTime          @map("date_time")
+  location            String?
+  description         String?
+  rsvpLink            String?           @map("rsvp_link")
+  targetPartnerTypes  String[]          @default([]) @map("target_partner_types")
+  targetSectors       String[]          @default([]) @map("target_sectors")
+  
+  createdBy           String            @map("created_by") // Slack user ID
+  outreachMessages    OutreachMessage[]
+  
+  createdAt           DateTime          @default(now()) @map("created_at")
+
+  @@map("events")
+}
+
+// Personalized outreach messages pending approval
+model OutreachMessage {
+  id                      String          @id @default(uuid())
+  eventId                 String          @map("event_id")
+  event                   Event           @relation(fields: [eventId], references: [id])
+  partnerId               String          @map("partner_id")
+  partner                 Partner         @relation(fields: [partnerId], references: [id])
+  
+  messageDraft            String          @map("message_draft")
+  personalizationContext  Json?           @map("personalization_context")
+  status                  OutreachStatus  @default(PENDING)
+  
+  approvedBy              String?         @map("approved_by") // Slack user ID
+  approvedAt              DateTime?       @map("approved_at")
+  sentAt                  DateTime?       @map("sent_at")
+  slackMessageTs          String?         @map("slack_message_ts") // Approval message in #bot-admin
+  
+  createdAt               DateTime        @default(now()) @map("created_at")
+
+  @@map("outreach_messages")
+}
+
+// Bi-weekly digests
+model Digest {
+  id              String        @id @default(uuid())
+  periodStart     DateTime      @map("period_start")
+  periodEnd       DateTime      @map("period_end")
+  content         Json          // Structured digest content
+  renderedMessage String?       @map("rendered_message")
+  status          DigestStatus  @default(DRAFT)
+  
+  sentToChannel   Boolean       @default(false) @map("sent_to_channel")
+  sentToDms       Boolean       @default(false) @map("sent_to_dms")
+  sentAt          DateTime?     @map("sent_at")
+  
+  items           DigestItem[]
+  
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  @@map("digests")
+}
+
+// Individual digest content items
+model DigestItem {
+  id        String   @id @default(uuid())
+  digestId  String   @map("digest_id")
+  digest    Digest   @relation(fields: [digestId], references: [id])
+  itemType  String   @map("item_type") // 'highlight', 'event_recap', 'featured_founder', 'new_partner'
+  content   Json
+  createdBy String?  @map("created_by") // Slack user ID
+  
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("digest_items")
+}
+
+// Activity log for audit trail
+model ActivityLog {
+  id           String   @id @default(uuid())
+  actionType   String   @map("action_type")
+  actorSlackId String?  @map("actor_slack_id")
+  targetType   String?  @map("target_type") // 'partner', 'event', 'outreach', 'digest'
+  targetId     String?  @map("target_id")
+  metadata     Json?
+  
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("activity_log")
+}
+

@@ -1,0 +1,39 @@
+{
+  "name": "foundry-partner-bot",
+  "version": "1.0.0",
+  "description": "AI-powered Slack bot for partner onboarding and community management",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio"
+  },
+  "keywords": [
+    "slack",
+    "bot",
+    "onboarding",
+    "openai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/client": "^5.7.0",
+    "@slack/bolt": "^3.17.0",
+    "dotenv": "^16.3.1",
+    "node-cron": "^3.0.3",
+    "openai": "^4.24.0",
+    "pino": "^8.17.0",
+    "pino-pretty": "^10.3.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "prisma": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
+
