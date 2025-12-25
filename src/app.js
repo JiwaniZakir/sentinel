@@ -1,4 +1,4 @@
-const { App } = require('@slack/bolt');
+const { App, ExpressReceiver } = require('@slack/bolt');
 const config = require('./config');
 const { logger, setSlackClient } = require('./utils/logger');
 
@@ -23,23 +23,40 @@ const db = require('./services/database');
  * Create and configure the Bolt app
  */
 function createApp() {
-  const appConfig = {
-    token: config.slack.botToken,
-    signingSecret: config.slack.signingSecret,
-  };
-
   // Use Socket Mode for local development only
-  // In production (Railway), always use HTTP mode
+  // In production (Railway), always use HTTP mode with ExpressReceiver
   if (config.slack.appToken && config.nodeEnv === 'development') {
-    appConfig.socketMode = true;
-    appConfig.appToken = config.slack.appToken;
     logger.info('Running in Socket Mode (development)');
-  } else {
-    appConfig.port = config.port;
-    logger.info({ port: config.port }, 'Running in HTTP Mode (production)');
+    return new App({
+      token: config.slack.botToken,
+      signingSecret: config.slack.signingSecret,
+      socketMode: true,
+      appToken: config.slack.appToken,
+    });
   }
 
-  const app = new App(appConfig);
+  // Production: Use ExpressReceiver for custom routes (health check)
+  logger.info({ port: config.port }, 'Running in HTTP Mode (production)');
+  
+  const receiver = new ExpressReceiver({
+    signingSecret: config.slack.signingSecret,
+  });
+
+  // Add health check endpoint
+  receiver.router.get('/health', async (req, res) => {
+    const dbHealthy = await db.healthCheck();
+    res.json({
+      status: dbHealthy ? 'healthy' : 'degraded',
+      database: dbHealthy ? 'connected' : 'disconnected',
+      timestamp: new Date().toISOString(),
+    });
+  });
+  logger.info('Health check endpoint registered at /health');
+
+  const app = new App({
+    token: config.slack.botToken,
+    receiver,
+  });
 
   return app;
 }
@@ -211,27 +228,11 @@ function setupErrorHandler(app) {
 
 /**
  * Health check endpoint (for HTTP mode)
+ * Note: Health check is now set up in createApp() with ExpressReceiver
  */
 function setupHealthCheck(app) {
-  // Set up health check for HTTP mode (production)
-  // Bolt's ExpressReceiver exposes the Express app via receiver.router
-  try {
-    if (app.receiver && app.receiver.router) {
-      app.receiver.router.get('/health', async (req, res) => {
-        const dbHealthy = await db.healthCheck();
-        res.json({
-          status: dbHealthy ? 'healthy' : 'degraded',
-          database: dbHealthy ? 'connected' : 'disconnected',
-          timestamp: new Date().toISOString(),
-        });
-      });
-      logger.info('Health check endpoint registered at /health');
-    } else {
-      logger.warn('Could not register health check - receiver.router not available');
-    }
-  } catch (error) {
-    logger.warn({ error: error.message }, 'Failed to setup health check endpoint');
-  }
+  // Health check already configured in createApp for production
+  // This function is kept for compatibility but does nothing
 }
 
 module.exports = {
