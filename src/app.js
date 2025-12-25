@@ -35,27 +35,13 @@ function createApp() {
     });
   }
 
-  // Production: Use ExpressReceiver for custom routes (health check)
+  // Production: Use default HTTP receiver
   logger.info({ port: config.port }, 'Running in HTTP Mode (production)');
   
-  const receiver = new ExpressReceiver({
-    signingSecret: config.slack.signingSecret,
-  });
-
-  // Add health check endpoint
-  receiver.router.get('/health', async (req, res) => {
-    const dbHealthy = await db.healthCheck();
-    res.json({
-      status: dbHealthy ? 'healthy' : 'degraded',
-      database: dbHealthy ? 'connected' : 'disconnected',
-      timestamp: new Date().toISOString(),
-    });
-  });
-  logger.info('Health check endpoint registered at /health');
-
   const app = new App({
     token: config.slack.botToken,
-    receiver,
+    signingSecret: config.slack.signingSecret,
+    port: config.port,
   });
 
   return app;
