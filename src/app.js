@@ -28,12 +28,15 @@ function createApp() {
     signingSecret: config.slack.signingSecret,
   };
 
-  // Use Socket Mode for development, HTTP for production
-  if (config.slack.appToken) {
+  // Use Socket Mode for local development only
+  // In production (Railway), always use HTTP mode
+  if (config.slack.appToken && config.nodeEnv === 'development') {
     appConfig.socketMode = true;
     appConfig.appToken = config.slack.appToken;
+    logger.info('Running in Socket Mode (development)');
   } else {
     appConfig.port = config.port;
+    logger.info({ port: config.port }, 'Running in HTTP Mode (production)');
   }
 
   const app = new App(appConfig);
@@ -210,8 +213,8 @@ function setupErrorHandler(app) {
  * Health check endpoint (for HTTP mode)
  */
 function setupHealthCheck(app) {
-  if (!config.slack.appToken) {
-    // Only needed for HTTP mode
+  // Set up health check for HTTP mode (production)
+  if (app.receiver && app.receiver.app) {
     app.receiver.app.get('/health', async (req, res) => {
       const dbHealthy = await db.healthCheck();
       res.json({
@@ -220,6 +223,7 @@ function setupHealthCheck(app) {
         timestamp: new Date().toISOString(),
       });
     });
+    logger.info('Health check endpoint registered at /health');
   }
 }
 
