@@ -13,8 +13,8 @@ RUN npm ci --omit=dev
 # Copy prisma schema
 COPY prisma ./prisma/
 
-# Generate Prisma client
-RUN npx prisma generate
+# Generate Prisma client (use dummy URL - prisma generate doesn't need real DB)
+RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
 
 # Copy source code
 COPY src ./src/
@@ -24,10 +24,6 @@ ENV NODE_ENV=production
 
 # Expose port (for HTTP mode)
 EXPOSE 3000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
 # Start the application
 CMD ["node", "src/index.js"]
