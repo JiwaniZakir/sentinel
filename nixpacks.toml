@@ -2,9 +2,9 @@
 nixPkgs = ["nodejs_20", "openssl"]
 
 [phases.install]
-cmds = ["npm ci"]
+# Set dummy DATABASE_URL for prisma postinstall script
+cmds = ["DATABASE_URL=postgresql://x:x@localhost:5432/x npm ci"]
 
-# Skip prisma generate during build - will run at start time
 [phases.build]
 cmds = []
 
