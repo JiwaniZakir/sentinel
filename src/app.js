@@ -214,16 +214,23 @@ function setupErrorHandler(app) {
  */
 function setupHealthCheck(app) {
   // Set up health check for HTTP mode (production)
-  if (app.receiver && app.receiver.app) {
-    app.receiver.app.get('/health', async (req, res) => {
-      const dbHealthy = await db.healthCheck();
-      res.json({
-        status: dbHealthy ? 'healthy' : 'degraded',
-        database: dbHealthy ? 'connected' : 'disconnected',
-        timestamp: new Date().toISOString(),
+  // Bolt's ExpressReceiver exposes the Express app via receiver.router
+  try {
+    if (app.receiver && app.receiver.router) {
+      app.receiver.router.get('/health', async (req, res) => {
+        const dbHealthy = await db.healthCheck();
+        res.json({
+          status: dbHealthy ? 'healthy' : 'degraded',
+          database: dbHealthy ? 'connected' : 'disconnected',
+          timestamp: new Date().toISOString(),
+        });
       });
-    });
-    logger.info('Health check endpoint registered at /health');
+      logger.info('Health check endpoint registered at /health');
+    } else {
+      logger.warn('Could not register health check - receiver.router not available');
+    }
+  } catch (error) {
+    logger.warn({ error: error.message }, 'Failed to setup health check endpoint');
   }
 }
 
