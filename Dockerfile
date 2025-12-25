@@ -4,20 +4,14 @@ FROM node:20-alpine
 # Set working directory
 WORKDIR /app
 
-# Set dummy DATABASE_URL for prisma generate (only needs schema, not real connection)
-ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
-
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --omit=dev
+# Install ALL dependencies (need prisma CLI for runtime generate)
+RUN npm ci
 
 # Copy prisma schema
 COPY prisma ./prisma/
-
-# Generate Prisma client
-RUN npx prisma generate
 
 # Copy source code
 COPY src ./src/
@@ -28,6 +22,6 @@ ENV NODE_ENV=production
 # Expose port (for HTTP mode)
 EXPOSE 3000
 
-# Start the application
-CMD ["node", "src/index.js"]
+# Generate prisma client and start app (prisma generate runs at runtime with real DATABASE_URL)
+CMD npx prisma generate && npx prisma db push --skip-generate && node src/index.js
 
