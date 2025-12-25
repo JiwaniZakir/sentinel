@@ -1,0 +1,13 @@
+[phases.setup]
+nixPkgs = ["nodejs_20", "npm"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+# Skip prisma generate during build - will run at start time
+[phases.build]
+cmds = []
+
+[start]
+cmd = "npx prisma generate && npx prisma db push && node src/index.js"
+
