@@ -1,9 +1,12 @@
+[variables]
+DATABASE_URL = "postgresql://user:pass@localhost:5432/db"
+PRISMA_SKIP_POSTINSTALL_GENERATE = "true"
+
 [phases.setup]
 nixPkgs = ["nodejs_20", "openssl"]
 
 [phases.install]
-# Set dummy DATABASE_URL for prisma postinstall script
-cmds = ["DATABASE_URL=postgresql://x:x@localhost:5432/x npm ci"]
+cmds = ["npm ci --ignore-scripts"]
 
 [phases.build]
 cmds = []
