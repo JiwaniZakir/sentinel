@@ -7,6 +7,7 @@
 
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 const config = require('../../config');
 const { logger } = require('../../utils/logger');
 
@@ -15,6 +16,10 @@ const SCRAPER_SCRIPT = path.join(__dirname, '../../../scripts/linkedin_scraper.p
 
 // Timeout for scraping (60 seconds)
 const SCRAPE_TIMEOUT = 60000;
+
+// Python executable - prefer venv if available (for Railway/Nix deployment)
+const VENV_PYTHON = '/app/.venv/bin/python3';
+const PYTHON_EXECUTABLE = fs.existsSync(VENV_PYTHON) ? VENV_PYTHON : 'python3';
 
 /**
  * Extract LinkedIn username from URL
@@ -69,8 +74,10 @@ async function scrapeProfile(linkedinUrl) {
     let stderr = '';
     let resolved = false;
     
-    // Spawn Python process
-    const pythonProcess = spawn('python3', [
+    // Spawn Python process (use venv on Railway, system python locally)
+    console.log('Using Python executable:', PYTHON_EXECUTABLE);
+    
+    const pythonProcess = spawn(PYTHON_EXECUTABLE, [
       SCRAPER_SCRIPT,
       linkedinUrl,
     ], {
