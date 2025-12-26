@@ -133,16 +133,111 @@ def setup_driver():
 
 
 def login_to_linkedin(driver, email, password):
-    """Log into LinkedIn."""
-    from linkedin_scraper import actions
+    """Log into LinkedIn with detailed error reporting."""
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
     
     try:
-        actions.login(driver, email, password)
-        # Wait for login to complete
-        time.sleep(3)
-        return True
+        print(f"Navigating to LinkedIn login page...", file=sys.stderr)
+        driver.get("https://www.linkedin.com/login")
+        time.sleep(2)
+        
+        # Take screenshot of login page for debugging
+        print(f"Current URL: {driver.current_url}", file=sys.stderr)
+        print(f"Page title: {driver.title}", file=sys.stderr)
+        
+        # Find and fill email field
+        print(f"Looking for email field...", file=sys.stderr)
+        try:
+            email_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, "username"))
+            )
+            email_field.clear()
+            email_field.send_keys(email)
+            print(f"Email entered: {email}", file=sys.stderr)
+        except Exception as e:
+            print(f"Failed to find/fill email field: {e}", file=sys.stderr)
+            return False, "Could not find email input field"
+        
+        # Find and fill password field
+        print(f"Looking for password field...", file=sys.stderr)
+        try:
+            password_field = driver.find_element(By.ID, "password")
+            password_field.clear()
+            password_field.send_keys(password)
+            print(f"Password entered (length: {len(password)})", file=sys.stderr)
+        except Exception as e:
+            print(f"Failed to find/fill password field: {e}", file=sys.stderr)
+            return False, "Could not find password input field"
+        
+        # Click login button
+        print(f"Clicking login button...", file=sys.stderr)
+        try:
+            login_button = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+            login_button.click()
+        except Exception as e:
+            print(f"Failed to click login button: {e}", file=sys.stderr)
+            return False, "Could not click login button"
+        
+        # Wait for login to process
+        print(f"Waiting for login to complete...", file=sys.stderr)
+        time.sleep(5)
+        
+        # Check current URL to determine login status
+        current_url = driver.current_url
+        print(f"Post-login URL: {current_url}", file=sys.stderr)
+        print(f"Post-login title: {driver.title}", file=sys.stderr)
+        
+        # Check for various login states
+        if "feed" in current_url or "mynetwork" in current_url or "/in/" in current_url:
+            print(f"Login successful! Redirected to: {current_url}", file=sys.stderr)
+            return True, None
+        
+        # Check for security checkpoint
+        if "checkpoint" in current_url:
+            print(f"Security checkpoint detected!", file=sys.stderr)
+            return False, "LinkedIn security checkpoint - account may need verification"
+        
+        # Check for CAPTCHA
+        if "challenge" in current_url:
+            print(f"CAPTCHA challenge detected!", file=sys.stderr)
+            return False, "CAPTCHA challenge - LinkedIn blocking automated access"
+        
+        # Check for 2FA
+        if "two-step-verification" in current_url or "verification" in current_url:
+            print(f"2FA verification required!", file=sys.stderr)
+            return False, "Two-factor authentication required - disable 2FA on this account"
+        
+        # Check for wrong password
+        try:
+            error_element = driver.find_element(By.CSS_SELECTOR, ".form__label--error, #error-for-password, #error-for-username, .alert-content")
+            error_text = error_element.text
+            print(f"Login error message: {error_text}", file=sys.stderr)
+            return False, f"LinkedIn error: {error_text}"
+        except:
+            pass
+        
+        # Still on login page = login failed
+        if "login" in current_url:
+            print(f"Still on login page - credentials may be wrong", file=sys.stderr)
+            # Try to get any visible error
+            try:
+                page_source = driver.page_source[:2000]
+                if "incorrect" in page_source.lower() or "wrong" in page_source.lower():
+                    return False, "Incorrect email or password"
+                if "recognize" in page_source.lower():
+                    return False, "LinkedIn doesn't recognize this email"
+            except:
+                pass
+            return False, "Login failed - still on login page"
+        
+        print(f"Unexpected post-login state, URL: {current_url}", file=sys.stderr)
+        return False, f"Unexpected state after login attempt: {current_url}"
+        
     except Exception as e:
-        return False
+        print(f"Login exception: {str(e)}", file=sys.stderr)
+        return False, str(e)
 
 
 def scrape_profile(linkedin_url, email=None, password=None):
@@ -176,10 +271,11 @@ def scrape_profile(linkedin_url, email=None, password=None):
         driver = setup_driver()
         
         # Login to LinkedIn
-        if not login_to_linkedin(driver, email, password):
+        login_success, login_error = login_to_linkedin(driver, email, password)
+        if not login_success:
             return {
                 "success": False,
-                "error": "Failed to login to LinkedIn. Check credentials.",
+                "error": login_error or "Failed to login to LinkedIn",
                 "error_type": "AUTH_FAILED"
             }
         
