@@ -8,6 +8,7 @@ const { logger } = require('../../utils/logger');
 const researchOrchestrator = require('../../services/research/orchestrator');
 const linkedinService = require('../../services/research/linkedin');
 const tavilyService = require('../../services/research/tavily');
+const perplexityService = require('../../services/research/perplexity');
 
 /**
  * Central command router for /partnerbot
@@ -37,6 +38,9 @@ function registerCommandRouter(app) {
     } else if (argsLower.startsWith('test-tavily')) {
       const linkedinUrl = args.replace(/^test-tavily\s*/i, '').trim() || 'https://www.linkedin.com/in/harris-stolzenberg-44468b78/';
       await testTavilyLinkedIn(respond, client, userId, userIsAdmin, linkedinUrl);
+    } else if (argsLower.startsWith('test-perplexity')) {
+      const nameAndFirm = args.replace(/^test-perplexity\s*/i, '').trim() || 'Harris Stolzenberg, Pear VC';
+      await testPerplexity(respond, client, userId, userIsAdmin, nameAndFirm);
     } else if (argsLower === 'announce-event') {
       await announceEvent(respond, client, command, userIsAdmin);
     } else if (argsLower.startsWith('add-highlight')) {
@@ -75,6 +79,7 @@ async function showHelp(respond, userIsAdmin) {
 • \`/partnerbot test-research [linkedin_url]\` — Test research pipeline (LinkedIn, Perplexity, Tavily)
 • \`/partnerbot test-linkedin [linkedin_url]\` — Test LinkedIn scraper only (detailed output)
 • \`/partnerbot test-tavily [linkedin_url]\` — Test Tavily LinkedIn search (no login needed)
+• \`/partnerbot test-perplexity [name, firm]\` — Test Perplexity research (person + firm)
   `;
 
   const blocks = [
@@ -732,6 +737,153 @@ async function testLinkedIn(respond, client, userId, userIsAdmin, linkedinUrl) {
 
     await respond({
       text: `❌ *LinkedIn test failed*\n\n*Error:* ${error.message}\n\nCheck Railway logs for details.`,
+      response_type: 'ephemeral',
+    });
+  }
+}
+
+/**
+ * Test Perplexity research (person + firm)
+ */
+async function testPerplexity(respond, client, userId, userIsAdmin, nameAndFirm) {
+  if (!userIsAdmin) {
+    await respond({
+      text: '⚠️ This command is only available to admins.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  console.log('=== TEST PERPLEXITY STARTED ===');
+  console.log('Input:', nameAndFirm);
+
+  // Parse name and firm from input
+  const parts = nameAndFirm.split(',').map(p => p.trim());
+  const name = parts[0] || 'Harris Stolzenberg';
+  const firm = parts[1] || 'Pear VC';
+
+  const hasPerplexityKey = !!config.perplexity?.apiKey;
+
+  await respond({
+    text: `🧠 *Perplexity Research Test*\n\n*Name:* ${name}\n*Firm:* ${firm}\n*Perplexity API:* ${hasPerplexityKey ? '✅ Configured' : '❌ Missing'}\n\n⏳ Researching person and firm... This may take 20-40 seconds.`,
+    response_type: 'ephemeral',
+  });
+
+  if (!hasPerplexityKey) {
+    await respond({
+      text: '❌ *Test aborted* - Missing `PERPLEXITY_API_KEY` in Railway environment variables.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  try {
+    const startTime = Date.now();
+    
+    // Run both person and firm research in parallel
+    console.log('Starting parallel Perplexity research...');
+    const [personResult, firmResult] = await Promise.all([
+      perplexityService.researchPerson(name, firm, 'Partner'),
+      perplexityService.researchFirm(firm, 'VC'),
+    ]);
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log('Perplexity research completed in', duration, 'seconds');
+    console.log('Person result success:', personResult.success);
+    console.log('Firm result success:', firmResult.success);
+
+    let resultMessage = `🧠 *Perplexity Research Complete* (${duration}s)\n\n`;
+    resultMessage += `*Name:* ${name}\n*Firm:* ${firm}\n\n`;
+
+    // Person research results
+    resultMessage += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    resultMessage += `*👤 Person Research:* ${personResult.success ? '✅' : '❌'}\n`;
+    
+    if (personResult.success && personResult.data) {
+      const data = personResult.data;
+      
+      if (data.summary) {
+        const summaryPreview = data.summary.length > 400 ? data.summary.substring(0, 400) + '...' : data.summary;
+        resultMessage += `\n*Summary:*\n>${summaryPreview}\n`;
+      }
+
+      if (data.newsArticles) {
+        resultMessage += `\n*📰 News:* Found\n`;
+      }
+      if (data.deals) {
+        resultMessage += `*💰 Deals/Investments:* Found\n`;
+      }
+      if (data.speaking) {
+        resultMessage += `*🎤 Speaking:* Found\n`;
+      }
+      if (data.podcasts) {
+        resultMessage += `*🎙️ Podcasts:* Found\n`;
+      }
+      
+      if (data.citations?.length > 0) {
+        resultMessage += `\n*🔗 Sources:* ${data.citations.length} citations\n`;
+        // Show first 3 citations
+        data.citations.slice(0, 3).forEach((cite, i) => {
+          resultMessage += `${i + 1}. ${cite}\n`;
+        });
+      }
+    } else if (personResult.error) {
+      resultMessage += `*Error:* ${personResult.error}\n`;
+    }
+
+    // Firm research results
+    resultMessage += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    resultMessage += `*🏢 Firm Research:* ${firmResult.success ? '✅' : '❌'}\n`;
+    
+    if (firmResult.success && firmResult.data) {
+      const data = firmResult.data;
+      
+      if (data.overview) {
+        const overviewPreview = data.overview.length > 300 ? data.overview.substring(0, 300) + '...' : data.overview;
+        resultMessage += `\n*Overview:*\n>${overviewPreview}\n`;
+      }
+
+      if (data.leadership) {
+        resultMessage += `\n*👥 Leadership:* Found\n`;
+      }
+      if (data.portfolio) {
+        resultMessage += `*📊 Portfolio:* Found\n`;
+      }
+      if (data.news) {
+        resultMessage += `*📰 Recent News:* Found\n`;
+      }
+      
+      if (data.citations?.length > 0) {
+        resultMessage += `\n*🔗 Sources:* ${data.citations.length} citations\n`;
+      }
+    } else if (firmResult.error) {
+      resultMessage += `*Error:* ${firmResult.error}\n`;
+    }
+
+    // Show raw content preview if available
+    if (personResult.data?.rawContent) {
+      resultMessage += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      resultMessage += `*📄 Raw Person Research:*\n`;
+      const rawPreview = personResult.data.rawContent.length > 500 
+        ? personResult.data.rawContent.substring(0, 500) + '...' 
+        : personResult.data.rawContent;
+      resultMessage += `>${rawPreview.split('\n').join('\n>')}\n`;
+    }
+
+    await respond({
+      text: resultMessage,
+      response_type: 'ephemeral',
+    });
+
+    console.log('=== TEST PERPLEXITY COMPLETED ===');
+
+  } catch (error) {
+    console.error('=== TEST PERPLEXITY FAILED ===');
+    console.error('Error:', error.message);
+    console.error('Stack:', error.stack);
+
+    await respond({
+      text: `❌ *Perplexity test failed*\n\n*Error:* ${error.message}\n\nCheck Railway logs for details.`,
       response_type: 'ephemeral',
     });
   }
