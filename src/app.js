@@ -14,6 +14,7 @@ const { registerApprovalActions } = require('./listeners/actions/approval');
 const { registerHelpCommand } = require('./listeners/commands/help');
 const { registerAnnounceEventCommand } = require('./listeners/commands/announceEvent');
 const { registerDigestCommands } = require('./listeners/commands/addHighlight');
+const { registerTestOnboardingCommand } = require('./listeners/commands/testOnboarding');
 
 // Services
 const scheduler = require('./services/scheduler');
@@ -67,6 +68,7 @@ async function registerListeners(app) {
   registerHelpCommand(app);
   registerAnnounceEventCommand(app);
   registerDigestCommands(app);
+  registerTestOnboardingCommand(app);
 
   // Digest action handlers
   registerDigestActions(app);

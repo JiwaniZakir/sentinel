@@ -48,6 +48,7 @@ async function showHelp(respond, isAdmin) {
 • \`/partnerbot view-queue\` — See pending approvals
 • \`/partnerbot partner-stats\` — View engagement analytics
 • \`/partnerbot export-partners\` — Export partner list as CSV
+• \`/partnerbot test-onboarding\` — Test onboarding workflow (DB, OpenAI, Slack)
   `;
 
   const blocks = [
