@@ -7,6 +7,7 @@ const { buildIntroApprovalBlocks } = require('../../templates/adminApproval');
 const { logger } = require('../../utils/logger');
 const researchOrchestrator = require('../../services/research/orchestrator');
 const linkedinService = require('../../services/research/linkedin');
+const tavilyService = require('../../services/research/tavily');
 
 /**
  * Central command router for /partnerbot
@@ -33,6 +34,9 @@ function registerCommandRouter(app) {
     } else if (argsLower.startsWith('test-linkedin')) {
       const linkedinUrl = args.replace(/^test-linkedin\s*/i, '').trim() || 'https://www.linkedin.com/in/harris-stolzenberg-44468b78/';
       await testLinkedIn(respond, client, userId, userIsAdmin, linkedinUrl);
+    } else if (argsLower.startsWith('test-tavily')) {
+      const linkedinUrl = args.replace(/^test-tavily\s*/i, '').trim() || 'https://www.linkedin.com/in/harris-stolzenberg-44468b78/';
+      await testTavilyLinkedIn(respond, client, userId, userIsAdmin, linkedinUrl);
     } else if (argsLower === 'announce-event') {
       await announceEvent(respond, client, command, userIsAdmin);
     } else if (argsLower.startsWith('add-highlight')) {
@@ -70,6 +74,7 @@ async function showHelp(respond, userIsAdmin) {
 • \`/partnerbot test-intro-flow\` — Test intro approval buttons (sends DM to you)
 • \`/partnerbot test-research [linkedin_url]\` — Test research pipeline (LinkedIn, Perplexity, Tavily)
 • \`/partnerbot test-linkedin [linkedin_url]\` — Test LinkedIn scraper only (detailed output)
+• \`/partnerbot test-tavily [linkedin_url]\` — Test Tavily LinkedIn search (no login needed)
   `;
 
   const blocks = [
@@ -727,6 +732,129 @@ async function testLinkedIn(respond, client, userId, userIsAdmin, linkedinUrl) {
 
     await respond({
       text: `❌ *LinkedIn test failed*\n\n*Error:* ${error.message}\n\nCheck Railway logs for details.`,
+      response_type: 'ephemeral',
+    });
+  }
+}
+
+/**
+ * Test Tavily LinkedIn search (no login required!)
+ */
+async function testTavilyLinkedIn(respond, client, userId, userIsAdmin, linkedinUrl) {
+  if (!userIsAdmin) {
+    await respond({
+      text: '⚠️ This command is only available to admins.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  console.log('=== TEST TAVILY LINKEDIN STARTED ===');
+  console.log('User ID:', userId);
+  console.log('LinkedIn URL:', linkedinUrl);
+
+  const hasTavilyKey = !!config.tavily?.apiKey;
+
+  await respond({
+    text: `🔍 *Tavily LinkedIn Search Test*\n\n*URL:* ${linkedinUrl}\n*Tavily API:* ${hasTavilyKey ? '✅ Configured' : '❌ Missing'}\n\n⏳ Searching LinkedIn via Tavily... This may take 10-20 seconds.`,
+    response_type: 'ephemeral',
+  });
+
+  if (!hasTavilyKey) {
+    await respond({
+      text: '❌ *Test aborted* - Missing `TAVILY_API_KEY` in Railway environment variables.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  try {
+    const startTime = Date.now();
+    
+    // Extract name hint from URL if possible
+    const usernameMatch = linkedinUrl.match(/linkedin\.com\/in\/([^\/\?]+)/i);
+    const username = usernameMatch ? usernameMatch[1].replace(/-/g, ' ') : null;
+    
+    console.log('Extracted username hint:', username);
+    
+    const result = await tavilyService.searchLinkedInProfile(
+      username || 'professional',  // name hint
+      'company',                    // firm hint (will be overridden by search)
+      linkedinUrl
+    );
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log('Tavily search completed in', duration, 'seconds');
+    console.log('Result:', JSON.stringify(result, null, 2));
+
+    let resultMessage = `🔍 *Tavily LinkedIn Search Complete* (${duration}s)\n\n`;
+    resultMessage += `*URL:* ${linkedinUrl}\n`;
+    resultMessage += `*Success:* ${result.success ? '✅' : '❌'}\n\n`;
+
+    if (result.success) {
+      const data = result.data;
+      
+      resultMessage += `*📝 Profile Data:*\n`;
+      resultMessage += `• Name: ${data?.name || 'N/A'}\n`;
+      resultMessage += `• Headline: ${data?.headline || 'N/A'}\n`;
+      resultMessage += `• Location: ${data?.location || 'N/A'}\n`;
+      resultMessage += `• LinkedIn URL: ${data?.linkedinUrl || 'N/A'}\n\n`;
+
+      if (data?.about) {
+        const aboutPreview = data.about.length > 300 ? data.about.substring(0, 300) + '...' : data.about;
+        resultMessage += `*About:*\n>${aboutPreview}\n\n`;
+      }
+
+      if (data?.experiences?.length > 0) {
+        resultMessage += `*Experience (${data.experiences.length}):*\n`;
+        data.experiences.slice(0, 3).forEach(exp => {
+          resultMessage += `• ${exp.title || 'Role'} at ${exp.company || 'Company'}\n`;
+        });
+        if (data.experiences.length > 3) {
+          resultMessage += `  _...and ${data.experiences.length - 3} more_\n`;
+        }
+        resultMessage += '\n';
+      }
+
+      if (data?.education?.length > 0) {
+        resultMessage += `*Education (${data.education.length}):*\n`;
+        data.education.slice(0, 2).forEach(edu => {
+          resultMessage += `• ${edu.school || 'School'}\n`;
+        });
+        resultMessage += '\n';
+      }
+
+      if (data?.skills?.length > 0) {
+        resultMessage += `*Skills:* ${data.skills.slice(0, 5).join(', ')}\n\n`;
+      }
+
+      if (data?.answer) {
+        const answerPreview = data.answer.length > 400 ? data.answer.substring(0, 400) + '...' : data.answer;
+        resultMessage += `*🤖 AI Summary:*\n>${answerPreview}\n\n`;
+      }
+
+      // Show raw results count
+      resultMessage += `*Raw Results:* ${data?.rawResults?.length || 0} found\n`;
+
+    } else {
+      resultMessage += `*❌ Error:* ${result.error}\n`;
+      resultMessage += `*Error Type:* ${result.error_type || 'UNKNOWN'}\n`;
+    }
+
+    await respond({
+      text: resultMessage,
+      response_type: 'ephemeral',
+    });
+
+    console.log('=== TEST TAVILY LINKEDIN COMPLETED ===');
+
+  } catch (error) {
+    console.error('=== TEST TAVILY LINKEDIN FAILED ===');
+    console.error('Error:', error.message);
+    console.error('Stack:', error.stack);
+
+    await respond({
+      text: `❌ *Tavily test failed*\n\n*Error:* ${error.message}\n\nCheck Railway logs for details.`,
       response_type: 'ephemeral',
     });
   }
