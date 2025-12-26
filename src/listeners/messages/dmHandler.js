@@ -2,11 +2,15 @@ const config = require('../../config');
 const db = require('../../services/database');
 const openaiService = require('../../services/openai');
 const slackService = require('../../services/slack');
+const research = require('../../services/research');
 const { 
   buildTextBlocks, 
 } = require('../../templates/welcomeDM');
 const { logger, logToSlack, logActivity } = require('../../utils/logger');
 const { parsePartnerType, parseSectors, parseStages } = require('../../utils/validators');
+
+// Regex to detect LinkedIn URLs
+const LINKEDIN_URL_REGEX = /https?:\/\/(www\.)?linkedin\.com\/in\/[a-zA-Z0-9\-_]+\/?/gi;
 
 /**
  * Handle DM messages for onboarding conversation
@@ -74,12 +78,45 @@ async function handleDM(app) {
       // Add user message to history
       await db.conversations.addMessage(conversation.id, 'user', userMessage);
       
-      // Get AI response
+      // Check for LinkedIn URL in message and trigger research
+      const linkedinMatch = userMessage.match(LINKEDIN_URL_REGEX);
+      let researchContext = null;
+      
+      if (linkedinMatch && config.research.enabled) {
+        const linkedinUrl = linkedinMatch[0];
+        console.log('LinkedIn URL detected:', linkedinUrl);
+        
+        // Store LinkedIn URL in conversation data
+        await db.conversations.update(conversation.id, {
+          extractedData: {
+            ...(conversation.extractedData || {}),
+            linkedin_url: linkedinUrl,
+          },
+        });
+        
+        // Start research in background (don't block the conversation)
+        triggerResearchAsync(userId, linkedinUrl, conversation.id);
+        
+        // Check if we already have research from a previous message
+        const existingPartner = await db.partners.findBySlackId(userId);
+        if (existingPartner?.researchSummary) {
+          researchContext = research.generateAIContext(existingPartner.researchSummary);
+        }
+      } else {
+        // Check for existing research context
+        const existingPartner = await db.partners.findBySlackId(userId);
+        if (existingPartner?.researchSummary) {
+          researchContext = research.generateAIContext(existingPartner.researchSummary);
+        }
+      }
+      
+      // Get AI response with research context if available
       const displayName = await slackService.getUserDisplayName(client, userId);
       const aiResponse = await openaiService.generateOnboardingResponse(
         conversationHistory,
         userMessage,
-        displayName
+        displayName,
+        researchContext
       );
 
       // Save assistant message
@@ -171,10 +208,18 @@ async function handleOnboardingComplete(client, userId, conversation, extractedD
     await db.conversations.complete(conversation.id, partner.id, extractedData);
     console.log('Conversation marked complete');
 
-    // Generate introduction message
+    // Generate introduction message with research context if available
     console.log('Generating intro message...');
-    const introMessage = extractedData.suggested_intro_message || 
-      await openaiService.generateIntroMessage(partnerData);
+    let introMessage = extractedData.suggested_intro_message;
+    
+    // If we have research data, generate a more personalized intro
+    if (partner.researchSummary && !introMessage) {
+      console.log('Using research data for intro generation');
+      const researchContext = research.generateAIContext(partner.researchSummary);
+      introMessage = await openaiService.generateIntroMessage(partnerData, researchContext);
+    } else if (!introMessage) {
+      introMessage = await openaiService.generateIntroMessage(partnerData);
+    }
     console.log('Intro message generated');
 
     // Store intro message in database for later retrieval
@@ -299,6 +344,63 @@ function buildIntroPromptBlocks(displayName, introMessage, partnerId) {
       ],
     },
   ];
+}
+
+/**
+ * Trigger research in the background without blocking the conversation
+ */
+async function triggerResearchAsync(userId, linkedinUrl, conversationId) {
+  try {
+    console.log('=== TRIGGERING ASYNC RESEARCH ===');
+    console.log('User:', userId, 'LinkedIn:', linkedinUrl);
+    
+    // First, create or get the partner record
+    let partner = await db.partners.findBySlackId(userId);
+    
+    if (!partner) {
+      // Create a placeholder partner record for research
+      partner = await db.partners.create({
+        slackUserId: userId,
+        name: 'Pending',
+        firm: 'Pending',
+        partnerType: 'OTHER',
+        linkedinUrl,
+        researchStatus: 'PENDING',
+      });
+    } else {
+      // Update with LinkedIn URL
+      await db.partners.update(userId, {
+        linkedinUrl,
+        researchStatus: 'PENDING',
+      });
+    }
+    
+    // Start the research pipeline
+    const researchResult = await research.startResearch(partner.id, linkedinUrl, {
+      skipLinkedIn: !config.research.linkedin.email, // Skip if no LinkedIn credentials
+    });
+    
+    console.log('Research completed:', researchResult.success ? 'SUCCESS' : 'FAILED');
+    
+    if (researchResult.success && researchResult.summary) {
+      // Update partner with research summary
+      const profile = researchResult.summary.profile || {};
+      await db.partners.update(userId, {
+        name: profile.name || partner.name,
+        firm: profile.currentCompany || partner.firm,
+        role: profile.currentTitle || partner.role,
+        researchSummary: researchResult.summary,
+        researchStatus: 'SUCCESS',
+        researchCompletedAt: new Date(),
+      });
+      
+      console.log('Partner updated with research data');
+    }
+    
+  } catch (error) {
+    console.error('Async research error:', error.message);
+    logger.error({ error: error.message, userId }, 'Background research failed');
+  }
 }
 
 module.exports = {

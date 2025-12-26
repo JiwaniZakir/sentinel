@@ -36,6 +36,21 @@ enum DigestStatus {
   SENT
 }
 
+enum ResearchType {
+  LINKEDIN
+  PERSON_NEWS
+  FIRM_INFO
+  SOCIAL_PRESENCE
+}
+
+enum ResearchStatus {
+  PENDING
+  IN_PROGRESS
+  SUCCESS
+  FAILED
+  RATE_LIMITED
+}
+
 // Partner profiles populated from AI onboarding
 model Partner {
   id                    String        @id @default(uuid())
@@ -64,14 +79,51 @@ model Partner {
   onboardingComplete    Boolean       @default(false) @map("onboarding_complete")
   onboardingData        Json?         @map("onboarding_data")
   
+  // Research data (denormalized for quick access)
+  researchSummary       Json?         @map("research_summary")
+  researchStatus        ResearchStatus? @map("research_status")
+  researchCompletedAt   DateTime?     @map("research_completed_at")
+  
   // Relationships
   conversations         OnboardingConversation[]
   outreachMessages      OutreachMessage[]
+  research              PartnerResearch[]
   
   createdAt             DateTime      @default(now()) @map("created_at")
   updatedAt             DateTime      @updatedAt @map("updated_at")
 
   @@map("partners")
+}
+
+// Research data collected on partners from various sources
+model PartnerResearch {
+  id              String         @id @default(uuid())
+  partnerId       String         @map("partner_id")
+  partner         Partner        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  
+  // Research classification
+  researchType    ResearchType   @map("research_type")
+  source          String         // API used: linkedin_scraper, perplexity, tavily
+  query           String?        // Search query used
+  
+  // Raw and structured data
+  rawData         Json           @map("raw_data")
+  structuredData  Json?          @map("structured_data")
+  
+  // Quality and freshness tracking
+  confidence      Float?         // 0-1 confidence score
+  status          ResearchStatus @default(PENDING)
+  errorMessage    String?        @map("error_message")
+  
+  scrapedAt       DateTime?      @map("scraped_at")
+  expiresAt       DateTime?      @map("expires_at")
+  
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  @@index([partnerId])
+  @@index([researchType])
+  @@map("partner_research")
 }
 
 // Multi-turn onboarding conversation state

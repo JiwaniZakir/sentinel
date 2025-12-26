@@ -14,6 +14,22 @@ const config = {
     model: process.env.OPENAI_MODEL || 'gpt-4o',
   },
 
+  // Research APIs
+  research: {
+    enabled: process.env.RESEARCH_ENABLED !== 'false',
+    rateLimit: parseInt(process.env.RESEARCH_RATE_LIMIT) || 20,
+    linkedin: {
+      email: process.env.LINKEDIN_EMAIL,
+      password: process.env.LINKEDIN_PASSWORD,
+    },
+    perplexity: {
+      apiKey: process.env.PERPLEXITY_API_KEY,
+    },
+    tavily: {
+      apiKey: process.env.TAVILY_API_KEY,
+    },
+  },
+
   // Database
   databaseUrl: process.env.DATABASE_URL,
 

@@ -2,10 +2,20 @@
 PRISMA_SKIP_POSTINSTALL_GENERATE = "true"
 
 [phases.setup]
-nixPkgs = ["nodejs_20", "openssl"]
+nixPkgs = [
+  "nodejs_20", 
+  "openssl", 
+  "python311", 
+  "python311Packages.pip",
+  "chromium",
+  "chromedriver"
+]
 
 [phases.install]
-cmds = ["npm ci --ignore-scripts"]
+cmds = [
+  "npm ci --ignore-scripts",
+  "pip install -r scripts/requirements.txt --user"
+]
 
 [phases.build]
 cmds = []

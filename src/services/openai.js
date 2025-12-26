@@ -10,9 +10,19 @@ const openai = new OpenAI({
 
 /**
  * Generate onboarding response in multi-turn conversation
+ * 
+ * @param {Array} conversationHistory - Previous messages in the conversation
+ * @param {string} userMessage - Current user message
+ * @param {string} partnerName - Partner's display name
+ * @param {string} researchContext - Optional research context from LinkedIn/web research
  */
-async function generateOnboardingResponse(conversationHistory, userMessage, partnerName) {
-  const systemPrompt = onboardingPrompts.getSystemPrompt(config.orgName);
+async function generateOnboardingResponse(conversationHistory, userMessage, partnerName, researchContext = null) {
+  let systemPrompt = onboardingPrompts.getSystemPrompt(config.orgName);
+  
+  // Add research context to system prompt if available
+  if (researchContext) {
+    systemPrompt += `\n\n${researchContext}\n\nUse this research to ask more informed, specific questions and to generate a truly personalized introduction.`;
+  }
   
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -107,16 +117,24 @@ async function generateEventOutreach(partnerProfile, eventDetails) {
 
 /**
  * Generate introduction message from partner data
+ * 
+ * @param {Object} partnerData - Partner profile data
+ * @param {string} researchContext - Optional research context for more personalized intro
  */
-async function generateIntroMessage(partnerData) {
-  const prompt = onboardingPrompts.getIntroPrompt(partnerData, config.orgName);
+async function generateIntroMessage(partnerData, researchContext = null) {
+  let prompt = onboardingPrompts.getIntroPrompt(partnerData, config.orgName);
+  
+  // Enhance prompt with research context if available
+  if (researchContext) {
+    prompt += `\n\n## ADDITIONAL RESEARCH CONTEXT\n${researchContext}\n\nUse this research to make the introduction highly specific and personal. Reference actual achievements, career highlights, and interesting facts from the research.`;
+  }
 
   try {
     const response = await openai.chat.completions.create({
       model: config.openai.model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.7,
-      max_tokens: 400,
+      max_tokens: 500,
     });
 
     return response.choices[0].message.content;
