@@ -11,8 +11,8 @@ const fs = require('fs');
 const config = require('../../config');
 const { logger } = require('../../utils/logger');
 
-// Path to the Python scraper script
-const SCRAPER_SCRIPT = path.join(__dirname, '../../../scripts/linkedin_scraper.py');
+// Path to the Python scraper script (named to avoid import conflict with linkedin_scraper package)
+const SCRAPER_SCRIPT = path.join(__dirname, '../../../scripts/scrape_linkedin.py');
 
 // Timeout for scraping (60 seconds)
 const SCRAPE_TIMEOUT = 60000;
