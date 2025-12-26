@@ -112,6 +112,15 @@ def try_alternative_searches(wiki, query, search_type):
     return None
 
 
+def iterate_sections(sections):
+    """Helper to iterate over sections regardless of type."""
+    if hasattr(sections, 'values'):
+        return sections.values()
+    elif hasattr(sections, '__iter__'):
+        return sections
+    return []
+
+
 def extract_relevant_sections(page, search_type):
     """Extract the most relevant sections based on search type."""
     relevant_keywords = {
@@ -125,7 +134,7 @@ def extract_relevant_sections(page, search_type):
     extracted = []
     
     def process_sections(sections, depth=0):
-        for section in sections.values():
+        for section in iterate_sections(sections):
             section_lower = section.title.lower()
             if any(kw in section_lower for kw in keywords):
                 text = section.text[:1500] if section.text else ""
@@ -189,7 +198,7 @@ def extract_section_titles(page):
     titles = []
     
     def get_titles(sections, prefix=""):
-        for section in sections.values():
+        for section in iterate_sections(sections):
             titles.append(f"{prefix}{section.title}")
             get_titles(section.sections, prefix + "  ")
     
@@ -209,7 +218,7 @@ def extract_career_info(page):
     career_keywords = ['career', 'professional', 'business', 'work', 'position']
     
     def search_sections(sections):
-        for section in sections.values():
+        for section in iterate_sections(sections):
             title_lower = section.title.lower()
             if any(kw in title_lower for kw in career_keywords):
                 # Extract text and look for patterns
@@ -230,7 +239,7 @@ def extract_education_info(page):
     
     # Look for education section
     def search_sections(sections):
-        for section in sections.values():
+        for section in iterate_sections(sections):
             if 'education' in section.title.lower() or 'early life' in section.title.lower():
                 education_info["raw_education"] = (section.text or "")[:1000]
             search_sections(section.sections)
@@ -255,7 +264,7 @@ def extract_company_info(page):
     
     # Look for history/founding sections
     def search_sections(sections):
-        for section in sections.values():
+        for section in iterate_sections(sections):
             title_lower = section.title.lower()
             if 'history' in title_lower or 'founding' in title_lower:
                 company_info["founding_info"] = (section.text or "")[:1500]
