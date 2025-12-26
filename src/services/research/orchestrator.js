@@ -74,20 +74,25 @@ async function startResearch(partnerId, linkedinUrl, options = {}) {
     errors: [],
   };
   
-  // Step 1: Start LinkedIn scrape (this gives us name and firm for other searches)
-  console.log('Step 1: LinkedIn scrape...');
-  const skipLinkedIn = options.skipLinkedIn || !process.env.LINKEDIN_EMAIL;
+  // Step 1: Try LinkedIn - first direct scrape, then Tavily fallback
+  console.log('Step 1: LinkedIn research...');
+  const hasLinkedInCreds = process.env.LINKEDIN_EMAIL && process.env.LINKEDIN_PASSWORD;
+  const hasTavilyKey = process.env.TAVILY_API_KEY;
   
   let name = options.name;
   let firm = options.firm;
   let role = options.role;
+  let linkedinSuccess = false;
   
-  if (!skipLinkedIn && linkedinUrl) {
+  // Try direct LinkedIn scrape first (if credentials available)
+  if (hasLinkedInCreds && linkedinUrl && !options.skipLinkedIn) {
+    console.log('Attempting direct LinkedIn scrape...');
     try {
       const linkedinResult = await linkedinService.scrapeProfile(linkedinUrl);
       results.linkedin = linkedinResult;
       
       if (linkedinResult.success) {
+        linkedinSuccess = true;
         // Extract name and firm from LinkedIn for other searches
         const transformed = linkedinService.transformLinkedInData(linkedinResult);
         name = name || transformed?.profile?.name;
@@ -96,22 +101,56 @@ async function startResearch(partnerId, linkedinUrl, options = {}) {
         
         // Save LinkedIn research to database
         await saveResearchRecord(partnerId, 'LINKEDIN', 'linkedin_scraper', linkedinResult, linkedinUrl);
+        console.log('Direct LinkedIn scrape successful');
       } else {
-        results.errors.push({ source: 'linkedin', error: linkedinResult.error });
+        console.log('Direct LinkedIn scrape failed:', linkedinResult.error);
+        results.errors.push({ source: 'linkedin_scraper', error: linkedinResult.error });
       }
     } catch (error) {
       console.error('LinkedIn scrape error:', error.message);
-      results.errors.push({ source: 'linkedin', error: error.message });
+      results.errors.push({ source: 'linkedin_scraper', error: error.message });
     }
-  } else {
-    console.log('Skipping LinkedIn scrape');
+  }
+  
+  // Fallback: Use Tavily to search LinkedIn (no login required!)
+  if (!linkedinSuccess && hasTavilyKey && linkedinUrl) {
+    console.log('Attempting Tavily LinkedIn search (fallback)...');
+    try {
+      const tavilyLinkedIn = await tavilyService.searchLinkedInProfile(name, firm, linkedinUrl);
+      
+      if (tavilyLinkedIn.success) {
+        results.linkedin = tavilyLinkedIn;
+        linkedinSuccess = true;
+        
+        // Extract name and firm from Tavily results
+        const profile = tavilyLinkedIn.data;
+        name = name || profile?.name;
+        firm = firm || profile?.currentCompany;
+        role = role || profile?.headline;
+        
+        // Save Tavily LinkedIn research to database
+        await saveResearchRecord(partnerId, 'LINKEDIN', 'tavily_linkedin', tavilyLinkedIn, linkedinUrl);
+        console.log('Tavily LinkedIn search successful');
+      } else {
+        console.log('Tavily LinkedIn search failed:', tavilyLinkedIn.error);
+        results.errors.push({ source: 'tavily_linkedin', error: tavilyLinkedIn.error });
+      }
+    } catch (error) {
+      console.error('Tavily LinkedIn error:', error.message);
+      results.errors.push({ source: 'tavily_linkedin', error: error.message });
+    }
+  }
+  
+  if (!hasLinkedInCreds && !hasTavilyKey) {
+    console.log('Skipping LinkedIn research - no credentials or Tavily API key');
   }
   
   // Validate we have minimum required info
   if (!name || !firm) {
     console.log('Missing name or firm, cannot proceed with additional research');
+    console.log('Name:', name, 'Firm:', firm);
     return {
-      success: results.linkedin?.success || false,
+      success: linkedinSuccess,
       results,
       error: 'Missing name or firm for additional research',
     };
