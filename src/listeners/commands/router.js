@@ -9,6 +9,7 @@ const researchOrchestrator = require('../../services/research/orchestrator');
 const linkedinService = require('../../services/research/linkedin');
 const tavilyService = require('../../services/research/tavily');
 const perplexityService = require('../../services/research/perplexity');
+const wikipediaService = require('../../services/research/wikipedia');
 
 /**
  * Central command router for /partnerbot
@@ -41,6 +42,9 @@ function registerCommandRouter(app) {
     } else if (argsLower.startsWith('test-perplexity')) {
       const nameAndFirm = args.replace(/^test-perplexity\s*/i, '').trim() || 'Harris Stolzenberg, Pear VC';
       await testPerplexity(respond, client, userId, userIsAdmin, nameAndFirm);
+    } else if (argsLower.startsWith('test-wikipedia')) {
+      const nameAndFirm = args.replace(/^test-wikipedia\s*/i, '').trim() || 'Marc Andreessen, Andreessen Horowitz';
+      await testWikipedia(respond, client, userId, userIsAdmin, nameAndFirm);
     } else if (argsLower === 'announce-event') {
       await announceEvent(respond, client, command, userIsAdmin);
     } else if (argsLower.startsWith('add-highlight')) {
@@ -80,6 +84,7 @@ async function showHelp(respond, userIsAdmin) {
 • \`/partnerbot test-linkedin [linkedin_url]\` — Test LinkedIn scraper only (detailed output)
 • \`/partnerbot test-tavily [linkedin_url]\` — Test Tavily LinkedIn search (no login needed)
 • \`/partnerbot test-perplexity [name, firm]\` — Test Perplexity research (person + firm)
+• \`/partnerbot test-wikipedia [name, firm]\` — Test Wikipedia search (FREE & unlimited!)
   `;
 
   const blocks = [
@@ -1007,6 +1012,139 @@ async function testTavilyLinkedIn(respond, client, userId, userIsAdmin, linkedin
 
     await respond({
       text: `❌ *Tavily test failed*\n\n*Error:* ${error.message}\n\nCheck Railway logs for details.`,
+      response_type: 'ephemeral',
+    });
+  }
+}
+
+/**
+ * Test Wikipedia search (FREE and UNLIMITED!)
+ */
+async function testWikipedia(respond, client, userId, userIsAdmin, nameAndFirm) {
+  if (!userIsAdmin) {
+    await respond({
+      text: '⚠️ This command is only available to admins.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  console.log('=== TEST WIKIPEDIA STARTED ===');
+  console.log('Input:', nameAndFirm);
+
+  // Parse name and firm from input
+  const parts = nameAndFirm.split(',').map(p => p.trim());
+  const name = parts[0] || 'Marc Andreessen';
+  const firm = parts[1] || 'Andreessen Horowitz';
+
+  await respond({
+    text: `📚 *Wikipedia Search Test (FREE!)*\n\n*Person:* ${name}\n*Company:* ${firm}\n\n⏳ Searching Wikipedia... This should be fast!`,
+    response_type: 'ephemeral',
+  });
+
+  try {
+    const startTime = Date.now();
+    
+    // Run both searches in parallel
+    console.log('Starting parallel Wikipedia searches...');
+    const [personResult, companyResult] = await Promise.all([
+      wikipediaService.searchPerson(name),
+      wikipediaService.searchCompany(firm),
+    ]);
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log('Wikipedia searches completed in', duration, 'seconds');
+    console.log('Person result success:', personResult.success);
+    console.log('Company result success:', companyResult.success);
+
+    let resultMessage = `📚 *Wikipedia Search Complete* (${duration}s) — *FREE!*\n\n`;
+
+    // Person results
+    resultMessage += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    resultMessage += `*👤 Person: ${name}*\n`;
+    resultMessage += `*Status:* ${personResult.success ? '✅ Found' : '❌ Not found'}\n`;
+    
+    if (personResult.success && personResult.data) {
+      const data = personResult.data;
+      
+      if (data.title) {
+        resultMessage += `*Wikipedia Title:* ${data.title}\n`;
+      }
+      
+      if (data.url) {
+        resultMessage += `*URL:* ${data.url}\n`;
+      }
+      
+      if (data.summary) {
+        const summaryPreview = data.summary.length > 400 ? data.summary.substring(0, 400) + '...' : data.summary;
+        resultMessage += `\n*Summary:*\n>${summaryPreview}\n`;
+      }
+      
+      if (data.career_info?.raw_career) {
+        const careerPreview = data.career_info.raw_career.length > 300 
+          ? data.career_info.raw_career.substring(0, 300) + '...' 
+          : data.career_info.raw_career;
+        resultMessage += `\n*Career Info:*\n>${careerPreview}\n`;
+      }
+      
+      if (data.categories?.length > 0) {
+        resultMessage += `\n*Categories:* ${data.categories.slice(0, 5).join(', ')}\n`;
+      }
+    } else if (personResult.error) {
+      resultMessage += `*Note:* ${personResult.error}\n`;
+    }
+
+    // Company results
+    resultMessage += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    resultMessage += `*🏢 Company: ${firm}*\n`;
+    resultMessage += `*Status:* ${companyResult.success ? '✅ Found' : '❌ Not found'}\n`;
+    
+    if (companyResult.success && companyResult.data) {
+      const data = companyResult.data;
+      
+      if (data.title) {
+        resultMessage += `*Wikipedia Title:* ${data.title}\n`;
+      }
+      
+      if (data.url) {
+        resultMessage += `*URL:* ${data.url}\n`;
+      }
+      
+      if (data.summary) {
+        const summaryPreview = data.summary.length > 400 ? data.summary.substring(0, 400) + '...' : data.summary;
+        resultMessage += `\n*Summary:*\n>${summaryPreview}\n`;
+      }
+      
+      if (data.company_info?.founding_info) {
+        const foundingPreview = data.company_info.founding_info.length > 300 
+          ? data.company_info.founding_info.substring(0, 300) + '...' 
+          : data.company_info.founding_info;
+        resultMessage += `\n*History/Founding:*\n>${foundingPreview}\n`;
+      }
+      
+      if (data.categories?.length > 0) {
+        resultMessage += `\n*Categories:* ${data.categories.slice(0, 5).join(', ')}\n`;
+      }
+    } else if (companyResult.error) {
+      resultMessage += `*Note:* ${companyResult.error}\n`;
+    }
+
+    resultMessage += `\n_Wikipedia is FREE and UNLIMITED - no API key required!_`;
+
+    await respond({
+      text: resultMessage,
+      response_type: 'ephemeral',
+    });
+
+    console.log('=== TEST WIKIPEDIA COMPLETED ===');
+
+  } catch (error) {
+    console.error('=== TEST WIKIPEDIA FAILED ===');
+    console.error('Error:', error.message);
+    console.error('Stack:', error.stack);
+
+    await respond({
+      text: `❌ *Wikipedia test failed*\n\n*Error:* ${error.message}\n\nCheck Railway logs for details.`,
       response_type: 'ephemeral',
     });
   }

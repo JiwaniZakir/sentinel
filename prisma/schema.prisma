@@ -41,6 +41,8 @@ enum ResearchType {
   PERSON_NEWS
   FIRM_INFO
   SOCIAL_PRESENCE
+  PERSON_BACKGROUND    // Wikipedia person data
+  COMPANY_BACKGROUND   // Wikipedia company data
 }
 
 enum ResearchStatus {

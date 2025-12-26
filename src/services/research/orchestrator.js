@@ -1,13 +1,14 @@
 /**
  * Research Orchestrator
  * 
- * Coordinates all research APIs (LinkedIn, Perplexity, Tavily) to build
+ * Coordinates all research APIs (LinkedIn, Perplexity, Tavily, Wikipedia) to build
  * a comprehensive profile on partners. Runs research in parallel where possible.
  */
 
 const linkedinService = require('./linkedin');
 const perplexityService = require('./perplexity');
 const tavilyService = require('./tavily');
+const wikipediaService = require('./wikipedia');
 const db = require('../database');
 const { logger } = require('../../utils/logger');
 
@@ -71,6 +72,8 @@ async function startResearch(partnerId, linkedinUrl, options = {}) {
     personNews: null,
     firmInfo: null,
     socialProfiles: null,
+    wikipediaPerson: null,
+    wikipediaCompany: null,
     errors: [],
   };
   
@@ -225,6 +228,46 @@ async function startResearch(partnerId, linkedinUrl, options = {}) {
     console.log('Skipping Tavily research (no API key)');
   }
   
+  // Wikipedia research (FREE and UNLIMITED!)
+  // Search for both person and company background
+  parallelTasks.push(
+    wikipediaService.searchPerson(name)
+      .then(async (result) => {
+        results.wikipediaPerson = result;
+        if (result.success) {
+          await saveResearchRecord(partnerId, 'PERSON_BACKGROUND', 'wikipedia', result, name);
+          console.log('Wikipedia person search successful');
+        } else {
+          console.log('Wikipedia person not found:', result.error);
+          // Don't add to errors - Wikipedia not finding someone is common
+        }
+        return result;
+      })
+      .catch((error) => {
+        console.error('Wikipedia person error:', error.message);
+        results.errors.push({ source: 'wikipedia_person', error: error.message });
+      })
+  );
+  
+  parallelTasks.push(
+    wikipediaService.searchCompany(firm)
+      .then(async (result) => {
+        results.wikipediaCompany = result;
+        if (result.success) {
+          await saveResearchRecord(partnerId, 'COMPANY_BACKGROUND', 'wikipedia', result, firm);
+          console.log('Wikipedia company search successful');
+        } else {
+          console.log('Wikipedia company not found:', result.error);
+          // Don't add to errors - Wikipedia not finding a company is common
+        }
+        return result;
+      })
+      .catch((error) => {
+        console.error('Wikipedia company error:', error.message);
+        results.errors.push({ source: 'wikipedia_company', error: error.message });
+      })
+  );
+  
   // Wait for all parallel tasks
   await Promise.allSettled(parallelTasks);
   
@@ -363,6 +406,57 @@ function aggregateResults(results) {
     if (profiles.youtube) summary.socialLinks.youtube = profiles.youtube.url;
     if (profiles.podcast) summary.socialLinks.podcast = profiles.podcast.url;
     if (profiles.blog) summary.socialLinks.blog = profiles.blog.url;
+  }
+  
+  // Wikipedia person background
+  if (results.wikipediaPerson?.success && results.wikipediaPerson.data) {
+    summary.sources.push('wikipedia_person');
+    const wikiData = results.wikipediaPerson.data;
+    
+    // Add Wikipedia summary to profile if we don't have one
+    if (!summary.profile.about && wikiData.summary) {
+      summary.profile.wikipediaSummary = wikiData.summary;
+    }
+    
+    // Add career info from Wikipedia
+    if (wikiData.career_info?.raw_career) {
+      summary.highlights.push({
+        type: 'wikipedia_career',
+        content: wikiData.career_info.raw_career,
+      });
+    }
+    
+    // Add education info
+    if (wikiData.education?.raw_education) {
+      summary.highlights.push({
+        type: 'wikipedia_education',
+        content: wikiData.education.raw_education,
+      });
+    }
+    
+    summary.wikipediaUrl = wikiData.url;
+    summary.wikipediaCategories = wikiData.categories;
+  }
+  
+  // Wikipedia company background
+  if (results.wikipediaCompany?.success && results.wikipediaCompany.data) {
+    summary.sources.push('wikipedia_company');
+    const wikiCompany = results.wikipediaCompany.data;
+    
+    // Enhance firm info with Wikipedia data
+    if (!summary.firmInfo.overview && wikiCompany.summary) {
+      summary.firmInfo.wikipediaOverview = wikiCompany.summary;
+    }
+    
+    if (wikiCompany.company_info?.founding_info) {
+      summary.firmInfo.founding = wikiCompany.company_info.founding_info;
+    }
+    
+    if (wikiCompany.company_info?.portfolio_info) {
+      summary.firmInfo.portfolio = wikiCompany.company_info.portfolio_info;
+    }
+    
+    summary.firmInfo.wikipediaUrl = wikiCompany.url;
   }
   
   return summary;
