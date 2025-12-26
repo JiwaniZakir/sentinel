@@ -45,6 +45,9 @@ function registerCommandRouter(app) {
     } else if (argsLower.startsWith('test-wikipedia')) {
       const nameAndFirm = args.replace(/^test-wikipedia\s*/i, '').trim() || 'Marc Andreessen, Andreessen Horowitz';
       await testWikipedia(respond, client, userId, userIsAdmin, nameAndFirm);
+    } else if (argsLower.startsWith('test-full-pipeline')) {
+      const linkedinUrl = args.replace(/^test-full-pipeline\s*/i, '').trim() || 'https://www.linkedin.com/in/harris-stolzenberg-44468b78/';
+      await testFullPipeline(respond, client, userId, userIsAdmin, linkedinUrl);
     } else if (argsLower === 'announce-event') {
       await announceEvent(respond, client, command, userIsAdmin);
     } else if (argsLower.startsWith('add-highlight')) {
@@ -85,6 +88,7 @@ async function showHelp(respond, userIsAdmin) {
 • \`/partnerbot test-tavily [linkedin_url]\` — Test Tavily LinkedIn search (no login needed)
 • \`/partnerbot test-perplexity [name, firm]\` — Test Perplexity research (person + firm)
 • \`/partnerbot test-wikipedia [name, firm]\` — Test Wikipedia search (FREE & unlimited!)
+• \`/partnerbot test-full-pipeline [linkedin_url]\` — Test FULL 5-stage pipeline (comprehensive!)
   `;
 
   const blocks = [
@@ -1147,6 +1151,152 @@ async function testWikipedia(respond, client, userId, userIsAdmin, nameAndFirm) 
       text: `❌ *Wikipedia test failed*\n\n*Error:* ${error.message}\n\nCheck Railway logs for details.`,
       response_type: 'ephemeral',
     });
+  }
+}
+
+/**
+ * Test FULL 5-stage research pipeline
+ */
+async function testFullPipeline(respond, client, userId, userIsAdmin, linkedinUrl) {
+  if (!userIsAdmin) {
+    await respond({
+      text: '⚠️ This command is only available to admins.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  console.log('=== TEST FULL PIPELINE STARTED ===');
+  console.log('User ID:', userId);
+  console.log('LinkedIn URL:', linkedinUrl);
+
+  await respond({
+    text: `🚀 *Testing FULL 5-Stage Research Pipeline*\n\n*LinkedIn URL:* ${linkedinUrl}\n\n*Pipeline Stages:*\n1️⃣ Data Collection (LinkedIn, Perplexity, Tavily, Wikipedia)\n2️⃣ Citation Crawling (follow Perplexity links)\n3️⃣ Quality Scoring & Fact Checking\n4️⃣ Profile Aggregation (PersonProfile, FirmProfile)\n5️⃣ Introduction Generation\n\n⏳ *This will take 30-60 seconds...*\n\nCheck Railway logs for detailed progress.`,
+    response_type: 'ephemeral',
+  });
+
+  let testPartner;
+  try {
+    // Create a temporary test partner
+    console.log('Step 1: Creating test partner...');
+    testPartner = await db.partners.create({
+      slackUserId: `TEST_FULL_PIPELINE_${Date.now()}`,
+      name: 'Test Pipeline Partner',
+      firm: 'Test Firm',
+      partnerType: 'VC',
+      linkedinUrl: linkedinUrl,
+      onboardingData: { 
+        test: true,
+        thesis: 'Early-stage AI/ML startups',
+        sectors: ['AI/ML', 'SaaS'],
+        origin_story: 'Started as an engineer, now investing in the future',
+        superpower: 'Technical due diligence',
+      },
+    });
+    console.log('Test partner created with ID:', testPartner.id);
+
+    // Run the FULL pipeline
+    console.log('Step 2: Running full pipeline...');
+    const startTime = Date.now();
+    
+    const pipelineResults = await researchOrchestrator.runFullPipeline(
+      testPartner.id,
+      linkedinUrl,
+      {
+        name: 'Harris Stolzenberg',
+        firm: 'Pear VC',
+        partnerType: 'VC',
+        generateIntro: true,
+        crawlCitations: true,
+      }
+    );
+    
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log('Pipeline completed in', totalTime, 'seconds');
+
+    // Build result message
+    let resultMessage = `🎉 *Full Pipeline Complete!* (${totalTime}s)\n\n`;
+    resultMessage += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    
+    // Stage 1: Data Collection
+    const stage1 = pipelineResults.stages.dataCollection;
+    resultMessage += `*1️⃣ Data Collection* (${(pipelineResults.timing.dataCollection / 1000).toFixed(1)}s)\n`;
+    resultMessage += `✅ Sources: ${stage1?.sourcesUsed?.join(', ') || 'none'}\n`;
+    resultMessage += `❌ Errors: ${stage1?.errorsCount || 0}\n\n`;
+    
+    // Stage 2: Citation Crawling
+    const stage2 = pipelineResults.stages.citationCrawling;
+    resultMessage += `*2️⃣ Citation Crawling* (${(pipelineResults.timing.citationCrawling / 1000).toFixed(1)}s)\n`;
+    resultMessage += `🔗 Citations found: ${stage2?.citationsFound || 0}\n`;
+    resultMessage += `🌐 Crawled: ${stage2?.crawled || 0}\n`;
+    resultMessage += `✅ Successful: ${stage2?.successful || 0}\n\n`;
+    
+    // Stage 3: Quality & Fact Checking
+    const stage3 = pipelineResults.stages.qualityChecking;
+    resultMessage += `*3️⃣ Quality & Fact Checking* (${(pipelineResults.timing.qualityChecking / 1000).toFixed(1)}s)\n`;
+    resultMessage += `📊 Overall Quality: ${(stage3?.overallQuality * 100).toFixed(0)}%\n`;
+    resultMessage += `📝 Facts collected: ${stage3?.factsCollected || 0}\n`;
+    resultMessage += `✅ Verified facts: ${stage3?.verifiedFacts || 0}\n`;
+    resultMessage += `⚠️ Disputed facts: ${stage3?.disputedFacts || 0}\n\n`;
+    
+    // Stage 4: Profile Aggregation
+    const stage4 = pipelineResults.stages.profileAggregation;
+    resultMessage += `*4️⃣ Profile Aggregation* (${(pipelineResults.timing.profileAggregation / 1000).toFixed(1)}s)\n`;
+    resultMessage += `👤 PersonProfile: ${stage4?.personProfileCreated ? '✅ Created' : '❌ Failed'}\n`;
+    resultMessage += `🏢 FirmProfile: ${stage4?.firmProfileCreated ? '✅ Created' : '❌ Failed'}\n`;
+    resultMessage += `📈 Data Quality: ${(stage4?.dataQualityScore * 100).toFixed(0)}%\n\n`;
+    
+    // Stage 5: Introduction Generation
+    const stage5 = pipelineResults.stages.introGeneration;
+    resultMessage += `*5️⃣ Introduction Generation* (${(pipelineResults.timing.introGeneration / 1000).toFixed(1)}s)\n`;
+    resultMessage += `📝 Generated: ${stage5?.generated ? '✅ Yes' : '❌ No'}\n`;
+    resultMessage += `📏 Length: ${stage5?.length || 0} chars\n\n`;
+    
+    // Show the generated introduction
+    if (pipelineResults.introduction) {
+      resultMessage += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+      resultMessage += `*Generated Introduction Preview:*\n\n`;
+      const introPreview = pipelineResults.introduction.length > 500 
+        ? pipelineResults.introduction.substring(0, 500) + '...' 
+        : pipelineResults.introduction;
+      resultMessage += introPreview + '\n\n';
+    }
+    
+    resultMessage += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    resultMessage += `✅ *Test complete!* Test data will be cleaned up.\n`;
+    resultMessage += `Check Railway logs for full details.`;
+
+    await respond({
+      text: resultMessage,
+      response_type: 'ephemeral',
+    });
+
+    console.log('=== TEST FULL PIPELINE COMPLETED ===');
+
+  } catch (error) {
+    console.error('=== TEST FULL PIPELINE FAILED ===');
+    console.error('Error:', error.message);
+    console.error('Stack:', error.stack);
+
+    await respond({
+      text: `❌ *Full pipeline test failed*\n\n*Error:* ${error.message}\n\nCheck Railway logs for details.`,
+      response_type: 'ephemeral',
+    });
+  } finally {
+    // Clean up test data
+    if (testPartner) {
+      console.log('Cleaning up test data...');
+      try {
+        // Delete PersonProfile first (if exists)
+        await db.prisma.personProfile.deleteMany({ where: { partnerId: testPartner.id } });
+        // Delete partner
+        await db.prisma.partner.delete({ where: { id: testPartner.id } });
+        console.log('Test data cleaned up');
+      } catch (e) {
+        console.log('Error cleaning up:', e.message);
+      }
+    }
+    console.log('=== TEST FULL PIPELINE COMPLETE ===');
   }
 }
 
