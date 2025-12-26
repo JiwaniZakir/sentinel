@@ -121,10 +121,15 @@ async function handleDM(app) {
  */
 async function handleOnboardingComplete(client, userId, conversation, extractedData, displayName, say) {
   try {
+    console.log('=== ONBOARDING COMPLETION STARTED ===');
+    console.log('User ID:', userId);
+    console.log('Extracted data:', JSON.stringify(extractedData, null, 2));
+    
     // Parse and normalize data
     const partnerType = parsePartnerType(extractedData.partner_type);
     const sectors = parseSectors(extractedData.sectors);
     const stageFocus = parseStages(extractedData.stage_focus);
+    console.log('Parsed - Type:', partnerType, 'Sectors:', sectors);
 
     // Get user email
     const email = await slackService.getUserEmail(client, userId);
@@ -152,29 +157,40 @@ async function handleOnboardingComplete(client, userId, conversation, extractedD
     };
 
     if (partner) {
+      console.log('Updating existing partner...');
       partner = await db.partners.update(userId, partnerData);
     } else {
+      console.log('Creating new partner...');
       partner = await db.partners.create({
         slackUserId: userId,
         ...partnerData,
       });
     }
+    console.log('Partner saved with ID:', partner.id);
 
     // Mark conversation as complete
+    console.log('Marking conversation complete...');
     await db.conversations.complete(conversation.id, partner.id, extractedData);
+    console.log('Conversation marked complete');
 
     // Generate introduction message
+    console.log('Generating intro message...');
     const introMessage = extractedData.suggested_intro_message || 
       await openaiService.generateIntroMessage(partnerData);
+    console.log('Intro message generated');
 
     // Send completion message to partner
+    console.log('Sending completion message to partner...');
     await say({
       blocks: buildOnboardingCompleteBlocks(displayName),
       text: 'Thanks for completing onboarding!',
     });
+    console.log('Completion message sent');
 
     // Post approval request to #bot-admin
+    console.log('Bot Admin Channel ID:', config.channels.botAdmin);
     if (config.channels.botAdmin) {
+      console.log('Posting to #bot-admin...');
       const approvalBlocks = buildIntroApprovalBlocks(partner, introMessage, conversation.id);
       await slackService.postToChannel(
         client,

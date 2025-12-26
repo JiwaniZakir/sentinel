@@ -51,6 +51,10 @@ async function main() {
     process.on('SIGINT', () => shutdown('SIGINT'));
 
   } catch (error) {
+    console.error('=== STARTUP ERROR ===');
+    console.error('Message:', error.message);
+    console.error('Stack:', error.stack);
+    console.error('Full error:', error);
     logger.error({ error: error.message, stack: error.stack }, 'Failed to start PartnerBot');
     process.exit(1);
   }

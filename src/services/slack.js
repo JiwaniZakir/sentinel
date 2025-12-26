@@ -62,13 +62,17 @@ async function sendDM(client, userId, blocks, text) {
  */
 async function postToChannel(client, channelId, blocks, text) {
   try {
+    console.log(`Attempting to post to channel: ${channelId}`);
     const result = await client.chat.postMessage({
       channel: channelId,
       blocks,
       text: text || 'Message from PartnerBot',
     });
+    console.log(`Successfully posted to channel: ${channelId}`);
     return result;
   } catch (error) {
+    console.error(`Failed to post to channel ${channelId}:`, error.message);
+    console.error('Full error:', JSON.stringify(error.data || error, null, 2));
     logger.error({ error: error.message, channelId }, 'Failed to post to channel');
     throw error;
   }
