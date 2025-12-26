@@ -182,25 +182,46 @@ function registerOnboardingActions(app) {
     try {
       // Get partner data
       console.log('Step 1: Finding partner by Slack ID...');
-      const partner = await db.partners.findBySlackId(userId);
-      console.log('Partner found:', partner ? 'Yes' : 'No');
+      let partner = await db.partners.findBySlackId(userId);
+      console.log('Partner found by Slack ID:', partner ? 'Yes' : 'No');
+      
+      // Fallback: try finding by partner ID from button value
+      if (!partner && partnerId) {
+        console.log('Trying to find partner by ID:', partnerId);
+        partner = await db.partners.findById(partnerId);
+        console.log('Partner found by ID:', partner ? 'Yes' : 'No');
+      }
       
       if (!partner) {
-        console.error('Partner not found for userId:', userId);
+        console.error('Partner not found for userId:', userId, 'or partnerId:', partnerId);
         throw new Error('Partner not found');
       }
-      console.log('Partner data:', JSON.stringify({ id: partner.id, firm: partner.firm, partnerType: partner.partnerType }, null, 2));
+      console.log('Partner data:', JSON.stringify({ 
+        id: partner.id, 
+        slackUserId: partner.slackUserId,
+        firm: partner.firm, 
+        partnerType: partner.partnerType,
+        onboardingDataKeys: partner.onboardingData ? Object.keys(partner.onboardingData) : 'null'
+      }, null, 2));
 
       console.log('Step 2: Getting intro message...');
-      console.log('onboardingData exists:', !!partner.onboardingData);
+      console.log('onboardingData:', JSON.stringify(partner.onboardingData, null, 2));
       const introMessage = partner.onboardingData?.pendingIntroMessage;
       console.log('Intro message exists:', !!introMessage);
-      console.log('Intro message preview:', introMessage?.substring(0, 100));
       
       if (!introMessage) {
-        console.error('No pending intro message found');
-        throw new Error('No pending introduction found');
+        console.error('No pending intro message found in onboardingData');
+        // Try to get from suggested_intro_message as fallback
+        const fallbackIntro = partner.onboardingData?.suggested_intro_message;
+        if (fallbackIntro) {
+          console.log('Using fallback from suggested_intro_message');
+        } else {
+          throw new Error('No pending introduction found');
+        }
       }
+      
+      const finalIntroMessage = introMessage || partner.onboardingData?.suggested_intro_message;
+      console.log('Final intro message preview:', finalIntroMessage?.substring(0, 100));
 
       // Post to #introductions
       console.log('Step 3: Building intro blocks...');
@@ -217,7 +238,7 @@ function registerOnboardingActions(app) {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: introMessage,
+            text: finalIntroMessage,
           },
         },
         {
