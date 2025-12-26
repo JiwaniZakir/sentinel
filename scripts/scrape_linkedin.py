@@ -153,9 +153,25 @@ def login_to_linkedin(driver, email, password):
             email_field = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.ID, "username"))
             )
+            # Wait for field to be interactive
+            WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.ID, "username"))
+            )
+            email_field.click()
+            time.sleep(0.5)
             email_field.clear()
-            email_field.send_keys(email)
+            time.sleep(0.3)
+            # Type slowly to avoid issues
+            for char in email:
+                email_field.send_keys(char)
+                time.sleep(0.02)
+            time.sleep(0.5)
+            # Verify email was entered
+            entered_value = email_field.get_attribute('value')
             print(f"Email entered: {email}", file=sys.stderr)
+            print(f"Email field value: {entered_value}", file=sys.stderr)
+            if entered_value != email:
+                print(f"WARNING: Email mismatch! Expected '{email}', got '{entered_value}'", file=sys.stderr)
         except Exception as e:
             print(f"Failed to find/fill email field: {e}", file=sys.stderr)
             return False, "Could not find email input field"
@@ -163,10 +179,22 @@ def login_to_linkedin(driver, email, password):
         # Find and fill password field
         print(f"Looking for password field...", file=sys.stderr)
         try:
-            password_field = driver.find_element(By.ID, "password")
+            password_field = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.ID, "password"))
+            )
+            password_field.click()
+            time.sleep(0.5)
             password_field.clear()
-            password_field.send_keys(password)
+            time.sleep(0.3)
+            # Type slowly to avoid issues
+            for char in password:
+                password_field.send_keys(char)
+                time.sleep(0.02)
+            time.sleep(0.5)
+            # Verify password was entered
+            entered_value = password_field.get_attribute('value')
             print(f"Password entered (length: {len(password)})", file=sys.stderr)
+            print(f"Password field length: {len(entered_value)}", file=sys.stderr)
         except Exception as e:
             print(f"Failed to find/fill password field: {e}", file=sys.stderr)
             return False, "Could not find password input field"
