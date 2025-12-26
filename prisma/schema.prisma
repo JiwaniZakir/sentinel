@@ -44,6 +44,7 @@ enum ResearchType {
   PERSON_BACKGROUND    // Wikipedia person data
   COMPANY_BACKGROUND   // Wikipedia company data
   CITATION_CRAWL       // Crawled article from citation
+  TWITTER_PROFILE      // Twitter/X profile and tweets
 }
 
 enum ResearchStatus {

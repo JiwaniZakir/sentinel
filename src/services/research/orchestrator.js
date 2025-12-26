@@ -16,11 +16,13 @@ const linkedinService = require('./linkedin');
 const perplexityService = require('./perplexity');
 const tavilyService = require('./tavily');
 const wikipediaService = require('./wikipedia');
+const twitterService = require('./twitter');
 const crawler = require('./crawler');
 const qualityScorer = require('./qualityScorer');
 const profileAggregator = require('./profileAggregator');
 const introGenerator = require('./introGenerator');
 const db = require('../database');
+const config = require('../../config');
 const { logger } = require('../../utils/logger');
 
 // Rate limiting configuration
@@ -83,6 +85,7 @@ async function startResearch(partnerId, linkedinUrl, options = {}) {
     personNews: null,
     firmInfo: null,
     socialProfiles: null,
+    twitter: null,
     wikipediaPerson: null,
     wikipediaCompany: null,
     errors: [],
@@ -237,6 +240,31 @@ async function startResearch(partnerId, linkedinUrl, options = {}) {
     );
   } else {
     console.log('Skipping Tavily research (no API key)');
+  }
+  
+  // Twitter research (if username available)
+  if (config.twitter.bearerToken && options.twitterUsername) {
+    console.log('Twitter research enabled');
+    parallelTasks.push(
+      twitterService.researchTwitterProfile(options.twitterUsername)
+        .then(async (result) => {
+          results.twitter = result;
+          if (result.success) {
+            await saveResearchRecord(partnerId, 'TWITTER_PROFILE', 'twitter', result, options.twitterUsername);
+            console.log('Twitter research successful');
+          } else {
+            console.log('Twitter research failed:', result.error);
+            results.errors.push({ source: 'twitter', error: result.error });
+          }
+          return result;
+        })
+        .catch((error) => {
+          console.error('Twitter research error:', error.message);
+          results.errors.push({ source: 'twitter', error: error.message });
+        })
+    );
+  } else {
+    console.log('Skipping Twitter research (no API key or username)');
   }
   
   // Wikipedia research (FREE and UNLIMITED!)
@@ -417,6 +445,35 @@ function aggregateResults(results) {
     if (profiles.youtube) summary.socialLinks.youtube = profiles.youtube.url;
     if (profiles.podcast) summary.socialLinks.podcast = profiles.podcast.url;
     if (profiles.blog) summary.socialLinks.blog = profiles.blog.url;
+  }
+  
+  // Twitter profile and activity
+  if (results.twitter?.success && results.twitter.data) {
+    summary.sources.push('twitter');
+    const twitterData = results.twitter.data;
+    
+    summary.socialLinks.twitter = twitterData.profile.url;
+    summary.profile.twitterUsername = twitterData.profile.username;
+    summary.profile.twitterBio = twitterData.profile.bio;
+    summary.profile.twitterFollowers = twitterData.profile.followersCount;
+    
+    if (twitterData.analysis) {
+      summary.twitterActivity = {
+        postingFrequency: twitterData.analysis.postingFrequency,
+        engagementRate: twitterData.analysis.engagementRate,
+        topInterests: twitterData.analysis.interests?.slice(0, 5),
+        expertise: twitterData.analysis.expertise,
+        topTweet: twitterData.analysis.topTweets?.[0],
+      };
+      
+      // Add interests to highlights
+      if (twitterData.analysis.interests?.length > 0) {
+        summary.highlights.push({
+          type: 'twitter_interests',
+          content: `Active on Twitter discussing: ${twitterData.analysis.interests.slice(0, 5).map(i => i.topic).join(', ')}`,
+        });
+      }
+    }
   }
   
   // Wikipedia person background

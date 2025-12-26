@@ -30,6 +30,13 @@ const config = {
     },
   },
 
+  // Twitter/X API
+  twitter: {
+    apiKey: process.env.TWITTER_API_KEY,
+    apiSecret: process.env.TWITTER_API_SECRET,
+    bearerToken: process.env.TWITTER_BEARER_TOKEN,
+  },
+
   // Database
   databaseUrl: process.env.DATABASE_URL,
 
