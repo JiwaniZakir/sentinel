@@ -703,25 +703,36 @@ async function runFullPipeline(partnerId, linkedinUrl, options = {}) {
     const stage5Start = Date.now();
     
     let introduction = null;
+    let introError = null;
+    
     if (options.generateIntro !== false) {
-      introduction = await introGenerator.generateRichIntro(partnerId, {
-        style: 'warm',
-        maxLength: 250,
-      });
-      
-      // Store intro in partner's onboarding data
-      await db.partners.update(partnerId, {
-        onboardingData: {
-          ...partner?.onboardingData,
-          generatedIntro: introduction,
-          introGeneratedAt: new Date().toISOString(),
-        },
-      });
+      try {
+        introduction = await introGenerator.generateRichIntro(partnerId, {
+          style: 'warm',
+          maxLength: 250,
+        });
+        
+        // Store intro in partner's onboarding data
+        if (introduction) {
+          await db.partners.update(partnerId, {
+            onboardingData: {
+              ...partner?.onboardingData,
+              generatedIntro: introduction,
+              introGeneratedAt: new Date().toISOString(),
+            },
+          });
+        }
+      } catch (error) {
+        console.error('Introduction generation failed:', error.message);
+        introError = error.message;
+        pipelineResults.errors.push({ stage: 'intro_generation', error: error.message });
+      }
     }
     
     pipelineResults.stages.introGeneration = {
       generated: !!introduction,
       length: introduction?.length || 0,
+      error: introError,
     };
     pipelineResults.timing.introGeneration = Date.now() - stage5Start;
     console.log(`Stage 5 complete: ${pipelineResults.timing.introGeneration}ms`);
@@ -797,13 +808,99 @@ function extractCitationsForCrawling(results) {
 function collectAllFacts(results, crawledCitations) {
   const facts = [];
   
-  // From Perplexity
+  // From LinkedIn
+  if (results.linkedin?.data) {
+    const data = results.linkedin.data;
+    
+    if (data.currentCompany && data.currentTitle) {
+      facts.push({ 
+        type: 'position', 
+        value: `${data.currentTitle} at ${data.currentCompany}`, 
+        source: 'linkedin' 
+      });
+    }
+    
+    if (data.location) {
+      facts.push({ type: 'location', value: data.location, source: 'linkedin' });
+    }
+    
+    if (data.experiences && Array.isArray(data.experiences)) {
+      data.experiences.slice(0, 3).forEach(exp => {
+        if (exp.title && exp.company) {
+          facts.push({ 
+            type: 'experience', 
+            value: `${exp.title} at ${exp.company}`, 
+            source: 'linkedin' 
+          });
+        }
+      });
+    }
+    
+    if (data.education && Array.isArray(data.education)) {
+      data.education.slice(0, 2).forEach(edu => {
+        if (edu.school) {
+          facts.push({ 
+            type: 'education', 
+            value: `${edu.degree || 'Studied'} at ${edu.school}`, 
+            source: 'linkedin' 
+          });
+        }
+      });
+    }
+  }
+  
+  // From Perplexity person news
   if (results.personNews?.data) {
     if (results.personNews.data.deals) {
       facts.push({ type: 'deals', value: results.personNews.data.deals, source: 'perplexity' });
     }
     if (results.personNews.data.newsArticles) {
       facts.push({ type: 'news', value: results.personNews.data.newsArticles, source: 'perplexity' });
+    }
+    if (results.personNews.data.speaking) {
+      facts.push({ type: 'speaking', value: results.personNews.data.speaking, source: 'perplexity' });
+    }
+    if (results.personNews.data.awards) {
+      facts.push({ type: 'awards', value: results.personNews.data.awards, source: 'perplexity' });
+    }
+  }
+  
+  // From Perplexity firm info
+  if (results.firmInfo?.data) {
+    if (results.firmInfo.data.overview) {
+      facts.push({ type: 'firm_overview', value: results.firmInfo.data.overview, source: 'perplexity' });
+    }
+    if (results.firmInfo.data.portfolio) {
+      facts.push({ type: 'firm_portfolio', value: results.firmInfo.data.portfolio, source: 'perplexity' });
+    }
+  }
+  
+  // From Wikipedia person
+  if (results.wikipediaPerson?.data) {
+    if (results.wikipediaPerson.data.summary) {
+      facts.push({ 
+        type: 'biography', 
+        value: results.wikipediaPerson.data.summary.substring(0, 500), 
+        source: 'wikipedia' 
+      });
+    }
+    if (results.wikipediaPerson.data.career_info?.raw_career) {
+      facts.push({ 
+        type: 'career', 
+        value: results.wikipediaPerson.data.career_info.raw_career.substring(0, 500), 
+        source: 'wikipedia' 
+      });
+    }
+  }
+  
+  // From Wikipedia company
+  if (results.wikipediaCompany?.data) {
+    if (results.wikipediaCompany.data.summary) {
+      facts.push({ 
+        type: 'firm_background', 
+        value: results.wikipediaCompany.data.summary.substring(0, 500), 
+        source: 'wikipedia' 
+      });
     }
   }
   

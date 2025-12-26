@@ -171,11 +171,42 @@ Make it warm and community-focused.`;
   }
 }
 
+/**
+ * Generic text generation with system + user prompts
+ */
+async function generateText(systemPrompt, userPrompt, options = {}) {
+  const {
+    temperature = 0.7,
+    maxTokens = 1000,
+    model = config.openai.model,
+  } = options;
+
+  try {
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ];
+
+    const response = await openai.chat.completions.create({
+      model,
+      messages,
+      temperature,
+      max_tokens: maxTokens,
+    });
+
+    return response.choices[0].message.content;
+  } catch (error) {
+    logger.error({ error: error.message }, 'OpenAI API error in text generation');
+    throw error;
+  }
+}
+
 module.exports = {
   generateOnboardingResponse,
   extractPartnerData,
   generateEventOutreach,
   generateIntroMessage,
   generateDigestSummary,
+  generateText,
 };
 

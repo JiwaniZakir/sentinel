@@ -1248,7 +1248,8 @@ async function testFullPipeline(respond, client, userId, userIsAdmin, linkedinUr
     
     // Stage 5: Introduction Generation
     const stage5 = pipelineResults.stages.introGeneration;
-    resultMessage += `*5️⃣ Introduction Generation* (${(pipelineResults.timing.introGeneration / 1000).toFixed(1)}s)\n`;
+    const stage5Time = pipelineResults.timing.introGeneration ? (pipelineResults.timing.introGeneration / 1000).toFixed(1) : 'N/A';
+    resultMessage += `*5️⃣ Introduction Generation* (${stage5Time}s)\n`;
     resultMessage += `📝 Generated: ${stage5?.generated ? '✅ Yes' : '❌ No'}\n`;
     resultMessage += `📏 Length: ${stage5?.length || 0} chars\n\n`;
     
