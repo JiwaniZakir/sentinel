@@ -10,11 +10,8 @@ const { handleDM } = require('./listeners/messages/dmHandler');
 const { registerOnboardingActions } = require('./listeners/actions/onboarding');
 const { registerApprovalActions } = require('./listeners/actions/approval');
 
-// Command handlers
-const { registerHelpCommand } = require('./listeners/commands/help');
-const { registerAnnounceEventCommand } = require('./listeners/commands/announceEvent');
-const { registerDigestCommands } = require('./listeners/commands/addHighlight');
-const { registerTestOnboardingCommand } = require('./listeners/commands/testOnboarding');
+// Command router (handles all /partnerbot commands)
+const { registerCommandRouter } = require('./listeners/commands/router');
 
 // Services
 const scheduler = require('./services/scheduler');
@@ -64,11 +61,8 @@ async function registerListeners(app) {
   registerOnboardingActions(app);
   registerApprovalActions(app);
 
-  // Command handlers
-  registerHelpCommand(app);
-  registerAnnounceEventCommand(app);
-  registerDigestCommands(app);
-  registerTestOnboardingCommand(app);
+  // Command router (all /partnerbot commands)
+  registerCommandRouter(app);
 
   // Digest action handlers
   registerDigestActions(app);

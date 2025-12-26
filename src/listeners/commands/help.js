@@ -11,11 +11,22 @@ function registerHelpCommand(app) {
     const userId = command.user_id;
     const userIsAdmin = isAdmin(userId);
 
+    // Commands handled by other handlers - let them pass through
+    const otherHandlers = [
+      'intro',
+      'announce-event',
+      'send-digest',
+      'preview-digest',
+      'add-highlight',
+      'feature-founder',
+      'test-onboarding',
+    ];
+
     // Route to appropriate handler based on subcommand
     if (args === '' || args === 'help') {
       await showHelp(respond, userIsAdmin);
-    } else if (args === 'intro') {
-      // This will be handled by intro command handler
+    } else if (otherHandlers.some(cmd => args.startsWith(cmd))) {
+      // Let other handlers process these
       return;
     } else {
       await respond({
