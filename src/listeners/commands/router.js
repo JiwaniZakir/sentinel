@@ -23,6 +23,8 @@ function registerCommandRouter(app) {
       await showHelp(respond, userIsAdmin);
     } else if (argsLower === 'test-onboarding') {
       await testOnboarding(respond, client, userId, userIsAdmin);
+    } else if (argsLower === 'test-intro-flow') {
+      await testIntroFlow(respond, client, userId, userIsAdmin);
     } else if (argsLower === 'announce-event') {
       await announceEvent(respond, client, command, userIsAdmin);
     } else if (argsLower.startsWith('add-highlight')) {
@@ -56,7 +58,8 @@ async function showHelp(respond, userIsAdmin) {
 • \`/partnerbot send-digest\` — Generate bi-weekly digest
 • \`/partnerbot preview-digest\` — Preview digest without sending
 • \`/partnerbot add-highlight <text>\` — Add highlight to next digest
-• \`/partnerbot test-onboarding\` — Test onboarding workflow (DB, OpenAI, Slack)
+• \`/partnerbot test-onboarding\` — Test components (DB, OpenAI, Slack)
+• \`/partnerbot test-intro-flow\` — Test intro approval buttons (sends DM to you)
   `;
 
   const blocks = [
@@ -242,6 +245,173 @@ async function testOnboarding(respond, client, userId, userIsAdmin) {
     });
   } catch (error) {
     console.error('=== TEST ONBOARDING FAILED ===');
+    console.error('Error:', error.message);
+    console.error('Stack:', error.stack);
+
+    await respond({
+      text: `❌ Test failed: ${error.message}\n\nCheck Railway logs for details.`,
+      response_type: 'ephemeral',
+    });
+  }
+}
+
+/**
+ * Test full intro approval flow - creates a partner record for YOU and sends the intro prompt
+ */
+async function testIntroFlow(respond, client, userId, userIsAdmin) {
+  if (!userIsAdmin) {
+    await respond({
+      text: '⚠️ This command is only available to admins.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  console.log('=== TEST INTRO FLOW STARTED ===');
+  console.log('User ID:', userId);
+
+  try {
+    // Get user info
+    const displayName = await slackService.getUserDisplayName(client, userId);
+    const email = await slackService.getUserEmail(client, userId);
+    console.log('Display name:', displayName);
+
+    // Check if partner already exists
+    let partner = await db.partners.findBySlackId(userId);
+    
+    const testIntroMessage = `👋 Hi everyone! I'm ${displayName} from *Test Ventures*.\n\nI'm a VC partner focused on *fintech* and *AI/ML* startups at the seed and Series A stage. I typically write checks between $500K - $2M.\n\nI'm excited to connect with founders building the future of financial infrastructure. Previously, I was a founder myself (acquired in 2020).\n\n*Looking for:* Technical founders with deep domain expertise\n*I can help with:* Fundraising strategy, GTM, and intro to enterprise customers`;
+
+    const partnerData = {
+      slackHandle: displayName,
+      name: displayName,
+      email: email,
+      firm: 'Test Ventures',
+      role: 'Partner',
+      partnerType: 'VC',
+      sectors: ['fintech', 'ai-ml'],
+      stageFocus: ['seed', 'series-a'],
+      checkSize: '$500K - $2M',
+      geographicFocus: ['US'],
+      idealFounderProfile: 'Technical founders with deep domain expertise',
+      engagementPreferences: ['pitch events', 'office hours'],
+      contributionOffers: ['mentorship', 'funding'],
+      goalsFromCommunity: 'Find great founders',
+      onboardingData: {
+        test: true,
+        pendingIntroMessage: testIntroMessage,
+        suggested_intro_message: testIntroMessage,
+      },
+    };
+
+    if (partner) {
+      console.log('Updating existing partner record...');
+      partner = await db.partners.update(userId, partnerData);
+    } else {
+      console.log('Creating new partner record...');
+      partner = await db.partners.create({
+        slackUserId: userId,
+        ...partnerData,
+      });
+    }
+    console.log('Partner saved with ID:', partner.id);
+
+    // Send the intro prompt directly to the user via DM
+    console.log('Opening DM with user...');
+    const dmResult = await client.conversations.open({ users: userId });
+    const dmChannel = dmResult.channel.id;
+    console.log('DM channel:', dmChannel);
+
+    // Build the intro prompt blocks (same as in dmHandler)
+    const introPromptBlocks = [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `🧪 *TEST MODE*\n\n🎉 *Thanks for testing the intro flow, ${displayName}!*\n\nWould you like to introduce yourself to the community in our #introductions channel?`,
+        },
+      },
+      {
+        type: 'divider',
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Here's a draft introduction:*`,
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `>${testIntroMessage.split('\n').join('\n>')}`,
+        },
+      },
+      {
+        type: 'divider',
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '✅ Post Introduction',
+              emoji: true,
+            },
+            style: 'primary',
+            action_id: 'partner_approve_intro',
+            value: partner.id,
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '✏️ Edit First',
+              emoji: true,
+            },
+            action_id: 'partner_edit_intro',
+            value: partner.id,
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '⏭️ Skip',
+              emoji: true,
+            },
+            action_id: 'partner_skip_intro',
+            value: partner.id,
+          },
+        ],
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: '_This is a TEST. Click any button to test the flow._',
+          },
+        ],
+      },
+    ];
+
+    await client.chat.postMessage({
+      channel: dmChannel,
+      blocks: introPromptBlocks,
+      text: 'Test: Would you like to introduce yourself?',
+    });
+
+    console.log('=== TEST INTRO FLOW - DM SENT ===');
+
+    await respond({
+      text: '✅ *Test intro flow started!*\n\nCheck your DMs - you should see a message with the intro buttons.\n\nClick "Post Introduction" to test posting to #introductions.',
+      response_type: 'ephemeral',
+    });
+
+  } catch (error) {
+    console.error('=== TEST INTRO FLOW FAILED ===');
     console.error('Error:', error.message);
     console.error('Stack:', error.stack);
 
