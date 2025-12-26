@@ -81,6 +81,13 @@ const partners = {
       return acc;
     }, {});
   },
+
+  async markOnboardingComplete(slackUserId) {
+    return prisma.partner.update({
+      where: { slackUserId },
+      data: { onboardingComplete: true },
+    });
+  },
 };
 
 // Onboarding conversation operations

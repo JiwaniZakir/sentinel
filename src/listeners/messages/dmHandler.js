@@ -4,9 +4,7 @@ const openaiService = require('../../services/openai');
 const slackService = require('../../services/slack');
 const { 
   buildTextBlocks, 
-  buildOnboardingCompleteBlocks 
 } = require('../../templates/welcomeDM');
-const { buildIntroApprovalBlocks } = require('../../templates/adminApproval');
 const { logger, logToSlack, logActivity } = require('../../utils/logger');
 const { parsePartnerType, parseSectors, parseStages } = require('../../utils/validators');
 
@@ -179,26 +177,21 @@ async function handleOnboardingComplete(client, userId, conversation, extractedD
       await openaiService.generateIntroMessage(partnerData);
     console.log('Intro message generated');
 
-    // Send completion message to partner
-    console.log('Sending completion message to partner...');
-    await say({
-      blocks: buildOnboardingCompleteBlocks(displayName),
-      text: 'Thanks for completing onboarding!',
+    // Store intro message in database for later retrieval
+    await db.partners.update(userId, {
+      onboardingData: {
+        ...extractedData,
+        pendingIntroMessage: introMessage,
+      },
     });
-    console.log('Completion message sent');
 
-    // Post approval request to #bot-admin
-    console.log('Bot Admin Channel ID:', config.channels.botAdmin);
-    if (config.channels.botAdmin) {
-      console.log('Posting to #bot-admin...');
-      const approvalBlocks = buildIntroApprovalBlocks(partner, introMessage, conversation.id);
-      await slackService.postToChannel(
-        client,
-        config.channels.botAdmin,
-        approvalBlocks,
-        `New partner introduction pending approval: ${partner.name}`
-      );
-    }
+    // Ask partner if they want to introduce themselves
+    console.log('Asking partner about introduction...');
+    await say({
+      blocks: buildIntroPromptBlocks(displayName, introMessage, partner.id),
+      text: 'Would you like to introduce yourself to the community?',
+    });
+    console.log('Intro prompt sent');
 
     // Log activity
     await logActivity(
@@ -226,6 +219,86 @@ async function handleOnboardingComplete(client, userId, conversation, extractedD
       text: 'Thanks! Our team will follow up.',
     });
   }
+}
+
+/**
+ * Build blocks to ask partner about their introduction
+ */
+function buildIntroPromptBlocks(displayName, introMessage, partnerId) {
+  return [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `🎉 *Thanks for completing your onboarding, ${displayName}!*\n\nWould you like to introduce yourself to the community in our #introductions channel?`,
+      },
+    },
+    {
+      type: 'divider',
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*Here's a draft introduction based on our conversation:*`,
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `>${introMessage.split('\n').join('\n>')}`,
+      },
+    },
+    {
+      type: 'divider',
+    },
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '✅ Post Introduction',
+            emoji: true,
+          },
+          style: 'primary',
+          action_id: 'partner_approve_intro',
+          value: partnerId,
+        },
+        {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '✏️ Edit First',
+            emoji: true,
+          },
+          action_id: 'partner_edit_intro',
+          value: partnerId,
+        },
+        {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '⏭️ Skip',
+            emoji: true,
+          },
+          action_id: 'partner_skip_intro',
+          value: partnerId,
+        },
+      ],
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: '_You can always introduce yourself later using `/partnerbot intro`_',
+        },
+      ],
+    },
+  ];
 }
 
 module.exports = {
