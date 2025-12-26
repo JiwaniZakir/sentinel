@@ -5,6 +5,7 @@ const slackService = require('../../services/slack');
 const openaiService = require('../../services/openai');
 const { buildIntroApprovalBlocks } = require('../../templates/adminApproval');
 const { logger } = require('../../utils/logger');
+const researchOrchestrator = require('../../services/research/orchestrator');
 
 /**
  * Central command router for /partnerbot
@@ -25,6 +26,9 @@ function registerCommandRouter(app) {
       await testOnboarding(respond, client, userId, userIsAdmin);
     } else if (argsLower === 'test-intro-flow') {
       await testIntroFlow(respond, client, userId, userIsAdmin);
+    } else if (argsLower.startsWith('test-research')) {
+      const linkedinUrl = args.replace(/^test-research\s*/i, '').trim() || 'https://www.linkedin.com/in/harris-stolzenberg-44468b78/';
+      await testResearch(respond, client, userId, userIsAdmin, linkedinUrl);
     } else if (argsLower === 'announce-event') {
       await announceEvent(respond, client, command, userIsAdmin);
     } else if (argsLower.startsWith('add-highlight')) {
@@ -60,6 +64,7 @@ async function showHelp(respond, userIsAdmin) {
 • \`/partnerbot add-highlight <text>\` — Add highlight to next digest
 • \`/partnerbot test-onboarding\` — Test components (DB, OpenAI, Slack)
 • \`/partnerbot test-intro-flow\` — Test intro approval buttons (sends DM to you)
+• \`/partnerbot test-research [linkedin_url]\` — Test research pipeline (LinkedIn, Perplexity, Tavily)
   `;
 
   const blocks = [
@@ -417,6 +422,183 @@ async function testIntroFlow(respond, client, userId, userIsAdmin) {
 
     await respond({
       text: `❌ Test failed: ${error.message}\n\nCheck Railway logs for details.`,
+      response_type: 'ephemeral',
+    });
+  }
+}
+
+/**
+ * Test research pipeline - runs LinkedIn scraper, Perplexity, and Tavily
+ */
+async function testResearch(respond, client, userId, userIsAdmin, linkedinUrl) {
+  if (!userIsAdmin) {
+    await respond({
+      text: '⚠️ This command is only available to admins.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  console.log('=== TEST RESEARCH STARTED ===');
+  console.log('User ID:', userId);
+  console.log('LinkedIn URL:', linkedinUrl);
+
+  // Check API configurations
+  const apiStatus = {
+    linkedin: !!config.linkedinScraper?.email && !!config.linkedinScraper?.password,
+    perplexity: !!config.perplexity?.apiKey,
+    tavily: !!config.tavily?.apiKey,
+  };
+
+  console.log('API Status:', apiStatus);
+
+  await respond({
+    text: `🔬 *Starting Research Pipeline Test*\n\n*LinkedIn URL:* ${linkedinUrl}\n\n*API Configuration:*\n• LinkedIn Scraper: ${apiStatus.linkedin ? '✅ Configured' : '❌ Missing credentials'}\n• Perplexity: ${apiStatus.perplexity ? '✅ Configured' : '❌ Missing API key'}\n• Tavily: ${apiStatus.tavily ? '✅ Configured' : '❌ Missing API key'}\n\n⏳ Running research... Check Railway logs for detailed progress.`,
+    response_type: 'ephemeral',
+  });
+
+  try {
+    // Step 1: Create a test partner for research
+    console.log('Step 1: Creating test partner...');
+    const testPartnerData = {
+      slackUserId: `RESEARCH_TEST_${Date.now()}`,
+      slackHandle: 'research-test',
+      name: 'Research Test Partner',
+      email: 'research-test@example.com',
+      firm: 'Unknown Firm',
+      role: 'Partner',
+      partnerType: 'VC',
+      linkedinUrl: linkedinUrl,
+      sectors: [],
+      onboardingData: { testResearch: true },
+    };
+
+    const testPartner = await db.partners.create(testPartnerData);
+    console.log('Test partner created with ID:', testPartner.id);
+
+    // Step 2: Run research orchestrator
+    console.log('Step 2: Starting research orchestration...');
+    const startTime = Date.now();
+    
+    const researchResults = await researchOrchestrator.startResearch(
+      testPartner.id,
+      linkedinUrl,
+      {
+        name: null, // Let LinkedIn scraper find this
+        firm: null, // Let LinkedIn scraper find this
+        partnerType: 'VC',
+      }
+    );
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log('Research completed in', duration, 'seconds');
+    console.log('Research results:', JSON.stringify(researchResults, null, 2));
+
+    // Step 3: Fetch the saved research from database
+    console.log('Step 3: Fetching saved research from database...');
+    const savedResearch = await researchOrchestrator.getPartnerResearch(testPartner.id);
+    console.log('Saved research records:', savedResearch?.records?.length || 0);
+
+    // Step 4: Build result summary
+    let resultMessage = `✅ *Research Pipeline Test Complete* (${duration}s)\n\n`;
+    resultMessage += `*LinkedIn URL:* ${linkedinUrl}\n`;
+    resultMessage += `*Test Partner ID:* \`${testPartner.id}\`\n\n`;
+
+    // LinkedIn results
+    if (researchResults.results?.linkedin?.success) {
+      const li = researchResults.results.linkedin.data;
+      resultMessage += `*📝 LinkedIn Data:*\n`;
+      resultMessage += `• Name: ${li?.name || 'N/A'}\n`;
+      resultMessage += `• Headline: ${li?.headline || 'N/A'}\n`;
+      resultMessage += `• Location: ${li?.location || 'N/A'}\n`;
+      resultMessage += `• About: ${li?.about?.substring(0, 100) || 'N/A'}...\n`;
+      resultMessage += `• Experiences: ${li?.experiences?.length || 0} found\n\n`;
+    } else if (researchResults.results?.linkedin?.error) {
+      resultMessage += `*📝 LinkedIn:* ❌ ${researchResults.results.linkedin.error}\n\n`;
+    } else if (!apiStatus.linkedin) {
+      resultMessage += `*📝 LinkedIn:* ⏭️ Skipped (no credentials)\n\n`;
+    }
+
+    // Perplexity results
+    if (researchResults.results?.personNews?.success) {
+      const pn = researchResults.results.personNews.data;
+      resultMessage += `*🔍 Perplexity (Person):* ✅\n`;
+      resultMessage += `• Summary: ${pn?.summary?.substring(0, 150) || 'Available'}...\n`;
+      resultMessage += `• Citations: ${pn?.citations?.length || 0} sources\n\n`;
+    } else if (researchResults.results?.personNews?.error) {
+      resultMessage += `*🔍 Perplexity (Person):* ❌ ${researchResults.results.personNews.error}\n\n`;
+    }
+
+    if (researchResults.results?.firmInfo?.success) {
+      const fi = researchResults.results.firmInfo.data;
+      resultMessage += `*🏢 Perplexity (Firm):* ✅\n`;
+      resultMessage += `• Overview: ${fi?.overview?.substring(0, 150) || 'Available'}...\n\n`;
+    } else if (researchResults.results?.firmInfo?.error) {
+      resultMessage += `*🏢 Perplexity (Firm):* ❌ ${researchResults.results.firmInfo.error}\n\n`;
+    } else if (!apiStatus.perplexity) {
+      resultMessage += `*🔍 Perplexity:* ⏭️ Skipped (no API key)\n\n`;
+    }
+
+    // Tavily results
+    if (researchResults.results?.socialProfiles?.success) {
+      const sp = researchResults.results.socialProfiles.data;
+      const profiles = sp?.profiles || {};
+      const profileLinks = Object.keys(profiles).filter(k => profiles[k]?.url).map(k => `${k}: ✅`);
+      resultMessage += `*🌐 Tavily (Social):* ✅\n`;
+      resultMessage += `• Profiles found: ${profileLinks.join(', ') || 'None'}\n\n`;
+    } else if (researchResults.results?.socialProfiles?.error) {
+      resultMessage += `*🌐 Tavily (Social):* ❌ ${researchResults.results.socialProfiles.error}\n\n`;
+    } else if (!apiStatus.tavily) {
+      resultMessage += `*🌐 Tavily:* ⏭️ Skipped (no API key)\n\n`;
+    }
+
+    // Errors summary
+    if (researchResults.errorsCount > 0) {
+      resultMessage += `*⚠️ Errors:* ${researchResults.errorsCount}\n`;
+      researchResults.results?.errors?.forEach(err => {
+        resultMessage += `• ${err.source}: ${err.error}\n`;
+      });
+      resultMessage += '\n';
+    }
+
+    // Database summary
+    resultMessage += `*💾 Database Records:* ${savedResearch?.records?.length || 0} saved\n`;
+
+    // Aggregated summary preview
+    if (researchResults.summary) {
+      resultMessage += `\n*📋 Aggregated Summary:*\n`;
+      resultMessage += `• Sources: ${researchResults.summary.sources?.join(', ') || 'None'}\n`;
+      if (researchResults.summary.profile?.name) {
+        resultMessage += `• Profile Name: ${researchResults.summary.profile.name}\n`;
+      }
+      if (researchResults.summary.socialLinks && Object.keys(researchResults.summary.socialLinks).length > 0) {
+        resultMessage += `• Social Links: ${Object.keys(researchResults.summary.socialLinks).join(', ')}\n`;
+      }
+    }
+
+    // Step 5: Clean up (optional - keeping for debug)
+    console.log('Step 5: Cleaning up...');
+    // Delete research records first (due to foreign key)
+    await db.prisma.partnerResearch.deleteMany({ where: { partnerId: testPartner.id } });
+    await db.prisma.partner.delete({ where: { id: testPartner.id } });
+    console.log('Test data cleaned up');
+
+    resultMessage += `\n_Test data cleaned up. Check Railway logs for full details._`;
+
+    console.log('=== TEST RESEARCH COMPLETED ===');
+
+    await respond({
+      text: resultMessage,
+      response_type: 'ephemeral',
+    });
+
+  } catch (error) {
+    console.error('=== TEST RESEARCH FAILED ===');
+    console.error('Error:', error.message);
+    console.error('Stack:', error.stack);
+
+    await respond({
+      text: `❌ Research test failed: ${error.message}\n\nCheck Railway logs for details.`,
       response_type: 'ephemeral',
     });
   }

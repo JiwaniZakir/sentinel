@@ -78,6 +78,17 @@ const config = {
   // Environment
   nodeEnv: process.env.NODE_ENV || 'development',
   port: process.env.PORT || 3000,
+
+  // Shorthand accessors for research APIs
+  get linkedinScraper() {
+    return this.research.linkedin;
+  },
+  get perplexity() {
+    return this.research.perplexity;
+  },
+  get tavily() {
+    return this.research.tavily;
+  },
 };
 
 // Validate required config
