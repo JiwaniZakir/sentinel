@@ -60,8 +60,8 @@ const BLOCKED_DOMAINS = [
 const API_HANDLED_DOMAINS = [
   'twitter.com',
   'x.com',
-  'reddit.com',
-  'quora.com',
+  'reddit.com',  // Reddit API handles posts/comments
+  'quora.com',   // Could add Quora API later
 ];
 
 /**
@@ -137,6 +137,38 @@ function extractTweetId(url) {
 }
 
 /**
+ * Check if URL is a Reddit post that should use API
+ */
+function isRedditUrl(url) {
+  try {
+    const urlObj = new URL(url);
+    const domain = urlObj.hostname.replace('www.', '');
+    return domain.includes('reddit.com') && urlObj.pathname.includes('/comments/');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Parse Reddit URL to extract subreddit and post ID
+ */
+function parseRedditUrl(url) {
+  try {
+    // URL format: /r/subreddit/comments/postid/title
+    const match = url.match(/\/r\/([^\/]+)\/comments\/([^\/]+)/);
+    if (match) {
+      return {
+        subreddit: match[1],
+        postId: match[2],
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Extract domain from URL
  */
 function extractDomain(url) {
@@ -203,6 +235,50 @@ async function fetchTweetViaApi(tweetId) {
 }
 
 /**
+ * Fetch Reddit post via API (requires reddit service)
+ */
+async function fetchRedditPostViaApi(subreddit, postId) {
+  if (!config.reddit.clientId) {
+    return {
+      success: false,
+      error: 'Reddit API not configured',
+      error_type: 'AUTH_MISSING',
+    };
+  }
+  
+  try {
+    // Load reddit service dynamically to avoid circular dependency
+    const redditService = require('./reddit');
+    const result = await redditService.getPost(postId, subreddit);
+    
+    if (!result.success) {
+      return result;
+    }
+    
+    const post = result.data.post;
+    return {
+      success: true,
+      data: {
+        postId,
+        title: post.title,
+        text: post.text,
+        author: `u/${post.author}`,
+        subreddit: post.subreddit,
+        score: post.score,
+        numComments: post.numComments,
+        createdAt: post.createdAt,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+      error_type: 'FETCH_ERROR',
+    };
+  }
+}
+
+/**
  * Crawl a URL and extract content
  * Uses fetch + basic HTML parsing (no external dependencies)
  * Special handling for Twitter URLs - uses API
@@ -248,6 +324,53 @@ async function crawlUrl(url, options = {}) {
         value: tweetData.data.text,
         confidence: 0.7,
         context: `Tweet with ${tweetData.data.likes} likes, ${tweetData.data.retweets} retweets`,
+      }],
+      mentionedPeople: [],
+      mentionedCompanies: [],
+      crawledAt: new Date().toISOString(),
+    };
+  }
+  
+  // Special handling for Reddit URLs
+  if (isRedditUrl(url)) {
+    console.log('Reddit URL detected, using API');
+    const parsed = parseRedditUrl(url);
+    
+    if (!parsed) {
+      return {
+        success: false,
+        error: 'Could not parse Reddit URL',
+        error_type: 'INVALID_URL',
+      };
+    }
+    
+    const redditData = await fetchRedditPostViaApi(parsed.subreddit, parsed.postId);
+    
+    if (!redditData.success) {
+      return redditData;
+    }
+    
+    // Format as crawl result
+    const post = redditData.data;
+    const fullText = `${post.title}\n\n${post.text || ''}`;
+    
+    return {
+      success: true,
+      url,
+      domain: extractDomain(url),
+      trustScore: 0.65, // Reddit is moderately trustworthy
+      httpStatus: 200,
+      contentType: 'reddit/post',
+      title: post.title,
+      author: post.author,
+      publishedDate: post.createdAt,
+      fullText,
+      summary: post.title,
+      extractedFacts: [{
+        type: 'social_post',
+        value: fullText,
+        confidence: 0.65,
+        context: `Reddit post with ${post.score} upvotes, ${post.numComments} comments in r/${post.subreddit}`,
       }],
       mentionedPeople: [],
       mentionedCompanies: [],
@@ -706,6 +829,9 @@ module.exports = {
   isTwitterUrl,
   extractTweetId,
   fetchTweetViaApi,
+  isRedditUrl,
+  parseRedditUrl,
+  fetchRedditPostViaApi,
   DOMAIN_TRUST_SCORES,
 };
 

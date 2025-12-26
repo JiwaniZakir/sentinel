@@ -37,6 +37,13 @@ const config = {
     bearerToken: process.env.TWITTER_BEARER_TOKEN,
   },
 
+  // Reddit API
+  reddit: {
+    clientId: process.env.REDDIT_CLIENT_ID,
+    clientSecret: process.env.REDDIT_CLIENT_SECRET,
+    userAgent: process.env.REDDIT_USER_AGENT || 'FoundryBot/1.0',
+  },
+
   // Database
   databaseUrl: process.env.DATABASE_URL,
 
