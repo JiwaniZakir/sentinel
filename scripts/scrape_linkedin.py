@@ -147,57 +147,102 @@ def login_to_linkedin(driver, email, password):
         print(f"Current URL: {driver.current_url}", file=sys.stderr)
         print(f"Page title: {driver.title}", file=sys.stderr)
         
+        # Helper function to set input value using JavaScript (bypasses anti-automation)
+        def set_input_value(element, value):
+            """Use JavaScript to set input value and trigger proper events."""
+            driver.execute_script("""
+                var element = arguments[0];
+                var value = arguments[1];
+                
+                // Focus the element
+                element.focus();
+                
+                // Clear existing value
+                element.value = '';
+                
+                // Set the new value
+                element.value = value;
+                
+                // Trigger input events so React/Angular/Vue detect the change
+                element.dispatchEvent(new Event('input', { bubbles: true }));
+                element.dispatchEvent(new Event('change', { bubbles: true }));
+                element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+                element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+            """, element, value)
+        
         # Find and fill email field
         print(f"Looking for email field...", file=sys.stderr)
         try:
             email_field = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.ID, "username"))
             )
-            # Wait for field to be interactive
-            WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.ID, "username"))
-            )
-            email_field.click()
+            time.sleep(1)
+            
+            # Use JavaScript to set the value
+            set_input_value(email_field, email)
             time.sleep(0.5)
-            email_field.clear()
-            time.sleep(0.3)
-            # Type slowly to avoid issues
-            for char in email:
-                email_field.send_keys(char)
-                time.sleep(0.02)
-            time.sleep(0.5)
+            
             # Verify email was entered
             entered_value = email_field.get_attribute('value')
-            print(f"Email entered: {email}", file=sys.stderr)
+            print(f"Email entered via JS: {email}", file=sys.stderr)
             print(f"Email field value: {entered_value}", file=sys.stderr)
-            if entered_value != email:
-                print(f"WARNING: Email mismatch! Expected '{email}', got '{entered_value}'", file=sys.stderr)
+            
+            if not entered_value:
+                # Fallback: try send_keys with ActionChains
+                print(f"JS failed, trying ActionChains...", file=sys.stderr)
+                from selenium.webdriver.common.action_chains import ActionChains
+                actions = ActionChains(driver)
+                actions.move_to_element(email_field)
+                actions.click()
+                actions.send_keys(email)
+                actions.perform()
+                time.sleep(0.5)
+                entered_value = email_field.get_attribute('value')
+                print(f"Email field value after ActionChains: {entered_value}", file=sys.stderr)
+            
+            if not entered_value:
+                return False, "Could not enter email - anti-automation blocking input"
+                
         except Exception as e:
             print(f"Failed to find/fill email field: {e}", file=sys.stderr)
-            return False, "Could not find email input field"
+            return False, f"Could not find email input field: {e}"
         
         # Find and fill password field
         print(f"Looking for password field...", file=sys.stderr)
         try:
             password_field = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.ID, "password"))
+                EC.presence_of_element_located((By.ID, "password"))
             )
-            password_field.click()
             time.sleep(0.5)
-            password_field.clear()
-            time.sleep(0.3)
-            # Type slowly to avoid issues
-            for char in password:
-                password_field.send_keys(char)
-                time.sleep(0.02)
+            
+            # Use JavaScript to set the value
+            set_input_value(password_field, password)
             time.sleep(0.5)
+            
             # Verify password was entered
             entered_value = password_field.get_attribute('value')
-            print(f"Password entered (length: {len(password)})", file=sys.stderr)
+            print(f"Password entered via JS (length: {len(password)})", file=sys.stderr)
             print(f"Password field length: {len(entered_value)}", file=sys.stderr)
+            
+            if not entered_value:
+                # Fallback: try ActionChains
+                print(f"JS failed for password, trying ActionChains...", file=sys.stderr)
+                from selenium.webdriver.common.action_chains import ActionChains
+                actions = ActionChains(driver)
+                actions.move_to_element(password_field)
+                actions.click()
+                actions.send_keys(password)
+                actions.perform()
+                time.sleep(0.5)
+                entered_value = password_field.get_attribute('value')
+                print(f"Password field length after ActionChains: {len(entered_value)}", file=sys.stderr)
+            
+            if not entered_value:
+                return False, "Could not enter password - anti-automation blocking input"
+                
         except Exception as e:
             print(f"Failed to find/fill password field: {e}", file=sys.stderr)
-            return False, "Could not find password input field"
+            return False, f"Could not find password input field: {e}"
         
         # Click login button
         print(f"Clicking login button...", file=sys.stderr)
