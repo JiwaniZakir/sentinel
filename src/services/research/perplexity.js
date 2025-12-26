@@ -8,7 +8,9 @@
 const { logger } = require('../../utils/logger');
 
 const PERPLEXITY_API_URL = 'https://api.perplexity.ai/chat/completions';
-const DEFAULT_MODEL = 'llama-3.1-sonar-small-128k-online';
+// Valid models: sonar, sonar-pro, sonar-reasoning
+// See: https://docs.perplexity.ai/guides/model-cards
+const DEFAULT_MODEL = 'sonar';
 
 /**
  * Make a request to the Perplexity API
