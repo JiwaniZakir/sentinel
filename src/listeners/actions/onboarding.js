@@ -168,13 +168,21 @@ function registerOnboardingActions(app) {
 
   // Handle "Post Introduction" button - partner approves their intro
   app.action('partner_approve_intro', async ({ ack, body, client }) => {
+    console.log('=== PARTNER APPROVE INTRO ACTION TRIGGERED ===');
+    
     await ack();
 
-    const userId = body.user.id;
-    const channelId = body.channel.id;
-    const partnerId = body.actions[0].value;
+    let userId, channelId, partnerId;
+    try {
+      userId = body.user.id;
+      channelId = body.channel?.id;
+      partnerId = body.actions[0].value;
+    } catch (parseError) {
+      console.error('Error parsing action body:', parseError.message);
+      console.error('Body:', JSON.stringify(body, null, 2));
+      return;
+    }
 
-    console.log('=== PARTNER APPROVE INTRO ===');
     console.log('User ID:', userId);
     console.log('Channel ID:', channelId);
     console.log('Partner ID from button:', partnerId);
