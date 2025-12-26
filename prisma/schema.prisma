@@ -43,6 +43,7 @@ enum ResearchType {
   SOCIAL_PRESENCE
   PERSON_BACKGROUND    // Wikipedia person data
   COMPANY_BACKGROUND   // Wikipedia company data
+  CITATION_CRAWL       // Crawled article from citation
 }
 
 enum ResearchStatus {
@@ -51,6 +52,23 @@ enum ResearchStatus {
   SUCCESS
   FAILED
   RATE_LIMITED
+}
+
+enum FactCheckStatus {
+  UNVERIFIED
+  VERIFIED
+  PARTIALLY_VERIFIED
+  DISPUTED
+  CONTRADICTED
+}
+
+enum FirmType {
+  VC
+  CORPORATE
+  ANGEL_NETWORK
+  ACCELERATOR
+  FAMILY_OFFICE
+  OTHER
 }
 
 // Partner profiles populated from AI onboarding
@@ -126,6 +144,178 @@ model PartnerResearch {
   @@index([partnerId])
   @@index([researchType])
   @@map("partner_research")
+}
+
+// Aggregated person profile from all research sources
+model PersonProfile {
+  id                String    @id @default(uuid())
+  partnerId         String    @unique @map("partner_id")
+  
+  // Core Identity
+  name              String
+  linkedinUrl       String?   @map("linkedin_url")
+  twitterUrl        String?   @map("twitter_url")
+  email             String?
+  location          String?
+  photoUrl          String?   @map("photo_url")
+  headline          String?
+  
+  // Career (JSON arrays)
+  careerTimeline    Json?     @map("career_timeline")    // [{company, role, startDate, endDate, highlights}]
+  education         Json?                                 // [{school, degree, field, year}]
+  
+  // Investment/Professional Focus
+  investmentThesis  String?   @map("investment_thesis")
+  sectors           String[]  @default([])
+  stageFocus        String[]  @default([]) @map("stage_focus")
+  checkSizeRange    String?   @map("check_size_range")
+  
+  // Achievements & Recognition (JSON arrays)
+  notableDeals      Json?     @map("notable_deals")      // [{company, round, amount, date, outcome}]
+  awards            Json?                                 // [{name, year, organization}]
+  pressFeatures     Json?     @map("press_features")     // [{publication, title, url, date}]
+  speakingEvents    Json?     @map("speaking_events")    // [{event, topic, date}]
+  
+  // Content & Thought Leadership (JSON arrays)
+  publications      Json?                                 // [{title, url, type, date}]
+  podcasts          Json?                                 // [{show, episode, url, date}]
+  socialContent     Json?     @map("social_content")     // Recent interesting tweets/posts
+  
+  // Personal (for engaging intros)
+  funFacts          String[]  @default([]) @map("fun_facts")
+  interests         String[]  @default([])
+  quotableQuotes    String[]  @default([]) @map("quotable_quotes")
+  
+  // AI-Generated Summaries
+  shortBio          String?   @map("short_bio")          // 2-3 sentence summary
+  introSummary      String?   @map("intro_summary")      // Rich intro for Slack
+  connectionAngles  Json?     @map("connection_angles")  // Ways to connect with community
+  
+  // Quality & Metadata
+  dataQualityScore  Float     @default(0) @map("data_quality_score")
+  factCheckScore    Float     @default(0) @map("fact_check_score")
+  sourcesUsed       String[]  @default([]) @map("sources_used")
+  lastResearchAt    DateTime? @map("last_research_at")
+  
+  // Relationship to firm
+  firmProfileId     String?   @map("firm_profile_id")
+  firmProfile       FirmProfile? @relation(fields: [firmProfileId], references: [id])
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@map("person_profiles")
+}
+
+// Aggregated firm/company profile (multi-person aware)
+model FirmProfile {
+  id                String    @id @default(uuid())
+  
+  // Core Identity
+  name              String    @unique
+  type              FirmType
+  foundedYear       Int?      @map("founded_year")
+  headquarters      String?
+  website           String?
+  linkedinUrl       String?   @map("linkedin_url")
+  description       String?
+  
+  // Investment Profile (for VC/Investment firms)
+  aum               String?   // Assets under management
+  fundCount         Int?      @map("fund_count")
+  portfolioSize     Int?      @map("portfolio_size")
+  investmentThesis  String?   @map("investment_thesis")
+  sectorFocus       String[]  @default([]) @map("sector_focus")
+  stageFocus        String[]  @default([]) @map("stage_focus")
+  geographyFocus    String[]  @default([]) @map("geography_focus")
+  
+  // Portfolio & Track Record (JSON arrays)
+  notablePortfolio  Json?     @map("notable_portfolio")  // [{company, round, outcome}]
+  exits             Json?                                 // [{company, type, value, date}]
+  
+  // Team (JSON array)
+  teamMembers       Json?     @map("team_members")       // [{name, role, linkedinUrl, partnerId}]
+  partnerCount      Int?      @map("partner_count")
+  
+  // News & Reputation (JSON arrays)
+  recentNews        Json?     @map("recent_news")        // [{title, url, date, summary}]
+  fundingNews       Json?     @map("funding_news")       // Fund raises, etc.
+  rankings          Json?                                 // [{source, rank, category, year}]
+  
+  // Quality & Metadata
+  dataQualityScore  Float     @default(0) @map("data_quality_score")
+  sourcesUsed       String[]  @default([]) @map("sources_used")
+  lastResearchAt    DateTime? @map("last_research_at")
+  
+  // Relationships
+  personProfiles    PersonProfile[]
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@map("firm_profiles")
+}
+
+// Crawled citation URLs from Perplexity
+model CitationCrawl {
+  id                  String    @id @default(uuid())
+  url                 String    @unique
+  domain              String
+  
+  // Content
+  title               String?
+  author              String?
+  publishedDate       DateTime? @map("published_date")
+  fullText            String?   @map("full_text")
+  summary             String?
+  
+  // Extracted Facts (JSON array)
+  extractedFacts      Json?     @map("extracted_facts")  // [{type, value, confidence, context}]
+  mentionedPeople     String[]  @default([]) @map("mentioned_people")
+  mentionedCompanies  String[]  @default([]) @map("mentioned_companies")
+  
+  // Quality
+  trustScore          Float     @default(0.5) @map("trust_score")
+  relevanceScore      Float?    @map("relevance_score")
+  
+  // Metadata
+  httpStatus          Int?      @map("http_status")
+  contentType         String?   @map("content_type")
+  crawledAt           DateTime  @default(now()) @map("crawled_at")
+  
+  // Link back to research
+  researchId          String?   @map("research_id")
+  
+  @@index([domain])
+  @@map("citation_crawls")
+}
+
+// Verified facts with cross-reference tracking
+model VerifiedFact {
+  id                  String          @id @default(uuid())
+  
+  // The fact itself
+  factType            String          @map("fact_type")   // 'investment', 'position', 'achievement', etc.
+  subject             String                               // Person or company name
+  value               String                               // The actual fact
+  context             String?                              // Additional context
+  
+  // Verification
+  status              FactCheckStatus @default(UNVERIFIED)
+  confidence          Float           @default(0)
+  corroboratingSources Json?          @map("corroborating_sources") // [{source, url, snippet}]
+  contradictions      Json?                                          // [{source, url, conflictingValue}]
+  
+  // Relationships
+  personProfileId     String?         @map("person_profile_id")
+  firmProfileId       String?         @map("firm_profile_id")
+  
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  @@index([factType])
+  @@index([subject])
+  @@map("verified_facts")
 }
 
 // Multi-turn onboarding conversation state

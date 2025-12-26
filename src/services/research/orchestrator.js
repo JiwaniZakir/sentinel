@@ -3,12 +3,23 @@
  * 
  * Coordinates all research APIs (LinkedIn, Perplexity, Tavily, Wikipedia) to build
  * a comprehensive profile on partners. Runs research in parallel where possible.
+ * 
+ * Full Pipeline:
+ * 1. Data Collection (LinkedIn, Perplexity, Tavily, Wikipedia)
+ * 2. Citation Crawling (follow Perplexity links)
+ * 3. Quality Scoring & Fact Checking
+ * 4. Profile Aggregation (PersonProfile, FirmProfile)
+ * 5. Introduction Generation
  */
 
 const linkedinService = require('./linkedin');
 const perplexityService = require('./perplexity');
 const tavilyService = require('./tavily');
 const wikipediaService = require('./wikipedia');
+const crawler = require('./crawler');
+const qualityScorer = require('./qualityScorer');
+const profileAggregator = require('./profileAggregator');
+const introGenerator = require('./introGenerator');
 const db = require('../database');
 const { logger } = require('../../utils/logger');
 
@@ -501,10 +512,350 @@ async function getPartnerResearch(partnerId) {
   }
 }
 
+/**
+ * Run the FULL research pipeline with all stages
+ * 
+ * @param {string} partnerId - The partner's database ID
+ * @param {string} linkedinUrl - The LinkedIn profile URL
+ * @param {Object} options - Research options
+ * @returns {Promise<Object>} - Full pipeline results including intro
+ */
+async function runFullPipeline(partnerId, linkedinUrl, options = {}) {
+  console.log('=== FULL RESEARCH PIPELINE STARTED ===');
+  console.log('Partner ID:', partnerId);
+  const startTime = Date.now();
+  
+  const pipelineResults = {
+    stages: {},
+    errors: [],
+    timing: {},
+  };
+  
+  try {
+    // ============ STAGE 1: DATA COLLECTION ============
+    console.log('\n>>> STAGE 1: Data Collection');
+    const stage1Start = Date.now();
+    
+    const researchResults = await startResearch(partnerId, linkedinUrl, options);
+    
+    pipelineResults.stages.dataCollection = {
+      success: researchResults.success,
+      sourcesUsed: researchResults.summary?.sources || [],
+      errorsCount: researchResults.errorsCount,
+    };
+    pipelineResults.timing.dataCollection = Date.now() - stage1Start;
+    console.log(`Stage 1 complete: ${pipelineResults.timing.dataCollection}ms`);
+    
+    if (!researchResults.success && !researchResults.results) {
+      throw new Error('Data collection failed completely');
+    }
+    
+    // ============ STAGE 2: CITATION CRAWLING ============
+    console.log('\n>>> STAGE 2: Citation Crawling');
+    const stage2Start = Date.now();
+    
+    let crawledCitations = [];
+    const citations = extractCitationsForCrawling(researchResults.results);
+    
+    if (citations.length > 0 && options.crawlCitations !== false) {
+      console.log(`Found ${citations.length} citations to crawl`);
+      
+      const partner = await db.partners.findById(partnerId);
+      crawledCitations = await crawler.crawlUrls(citations.slice(0, 10), {
+        maxConcurrent: 3,
+        personName: partner?.name,
+        firmName: partner?.firm,
+      });
+      
+      // Save crawled data
+      for (const crawled of crawledCitations) {
+        if (crawled.success) {
+          try {
+            await db.prisma.citationCrawl.upsert({
+              where: { url: crawled.url },
+              create: {
+                url: crawled.url,
+                domain: crawled.domain,
+                title: crawled.title,
+                author: crawled.author,
+                publishedDate: crawled.publishedDate ? new Date(crawled.publishedDate) : null,
+                fullText: crawled.fullText?.substring(0, 50000), // Limit text
+                summary: crawled.summary,
+                extractedFacts: crawled.extractedFacts || [],
+                mentionedPeople: crawled.mentionedPeople || [],
+                mentionedCompanies: crawled.mentionedCompanies || [],
+                trustScore: crawled.trustScore,
+                httpStatus: crawled.httpStatus,
+                contentType: crawled.contentType,
+                researchId: partnerId,
+              },
+              update: {
+                title: crawled.title,
+                fullText: crawled.fullText?.substring(0, 50000),
+                summary: crawled.summary,
+                extractedFacts: crawled.extractedFacts || [],
+                crawledAt: new Date(),
+              },
+            });
+          } catch (e) {
+            console.log('Error saving citation:', e.message);
+          }
+        }
+      }
+      
+      // Add to research results for aggregation
+      researchResults.results.crawledCitations = crawledCitations;
+    }
+    
+    pipelineResults.stages.citationCrawling = {
+      citationsFound: citations.length,
+      crawled: crawledCitations.length,
+      successful: crawledCitations.filter(c => c.success).length,
+    };
+    pipelineResults.timing.citationCrawling = Date.now() - stage2Start;
+    console.log(`Stage 2 complete: ${pipelineResults.timing.citationCrawling}ms`);
+    
+    // ============ STAGE 3: QUALITY SCORING & FACT CHECKING ============
+    console.log('\n>>> STAGE 3: Quality Scoring & Fact Checking');
+    const stage3Start = Date.now();
+    
+    // Calculate overall quality score
+    const qualityScore = qualityScorer.calculateProfileQualityScore(researchResults.results);
+    
+    // Collect all facts from all sources
+    const allFacts = collectAllFacts(researchResults.results, crawledCitations);
+    
+    // Deduplicate facts
+    const uniqueFacts = qualityScorer.deduplicateFacts(allFacts);
+    
+    // Cross-reference and verify facts
+    const allSources = collectAllSources(researchResults.results, crawledCitations);
+    const verifiedFacts = qualityScorer.crossReferenceFacts(uniqueFacts, allSources);
+    
+    // Save verified facts
+    const highConfidenceFacts = qualityScorer.getHighConfidenceFacts(verifiedFacts, 0.6);
+    for (const fact of highConfidenceFacts.slice(0, 20)) {
+      try {
+        await db.prisma.verifiedFact.create({
+          data: {
+            factType: fact.fact.type || 'general',
+            subject: options.name || 'unknown',
+            value: typeof fact.fact.value === 'string' ? fact.fact.value : JSON.stringify(fact.fact.value),
+            context: fact.fact.context,
+            status: fact.status.toUpperCase().replace(/_/g, '_'),
+            confidence: fact.confidence,
+            corroboratingSources: fact.corroboratingSources,
+            contradictions: fact.contradictions,
+            personProfileId: null, // Will be linked after profile creation
+          },
+        });
+      } catch (e) {
+        // Skip duplicates or errors
+      }
+    }
+    
+    pipelineResults.stages.qualityChecking = {
+      overallQuality: qualityScore,
+      factsCollected: allFacts.length,
+      uniqueFacts: uniqueFacts.length,
+      verifiedFacts: verifiedFacts.filter(f => f.status === 'verified').length,
+      disputedFacts: verifiedFacts.filter(f => f.status === 'disputed').length,
+    };
+    pipelineResults.timing.qualityChecking = Date.now() - stage3Start;
+    console.log(`Stage 3 complete: ${pipelineResults.timing.qualityChecking}ms`);
+    
+    // ============ STAGE 4: PROFILE AGGREGATION ============
+    console.log('\n>>> STAGE 4: Profile Aggregation');
+    const stage4Start = Date.now();
+    
+    const partner = await db.partners.findById(partnerId);
+    
+    // Build PersonProfile
+    const personProfile = await profileAggregator.buildPersonProfile(
+      partnerId,
+      researchResults.results,
+      partner?.onboardingData || {}
+    );
+    
+    // Build/Update FirmProfile
+    let firmProfile = null;
+    if (partner?.firm) {
+      firmProfile = await profileAggregator.buildFirmProfile(
+        partner.firm,
+        researchResults.results,
+        partner.partnerType
+      );
+      
+      // Link person to firm
+      await profileAggregator.linkPersonToFirm(partnerId, partner.firm);
+    }
+    
+    pipelineResults.stages.profileAggregation = {
+      personProfileCreated: !!personProfile,
+      firmProfileCreated: !!firmProfile,
+      dataQualityScore: personProfile?.dataQualityScore || 0,
+    };
+    pipelineResults.timing.profileAggregation = Date.now() - stage4Start;
+    console.log(`Stage 4 complete: ${pipelineResults.timing.profileAggregation}ms`);
+    
+    // ============ STAGE 5: INTRODUCTION GENERATION ============
+    console.log('\n>>> STAGE 5: Introduction Generation');
+    const stage5Start = Date.now();
+    
+    let introduction = null;
+    if (options.generateIntro !== false) {
+      introduction = await introGenerator.generateRichIntro(partnerId, {
+        style: 'warm',
+        maxLength: 250,
+      });
+      
+      // Store intro in partner's onboarding data
+      await db.partners.update(partnerId, {
+        onboardingData: {
+          ...partner?.onboardingData,
+          generatedIntro: introduction,
+          introGeneratedAt: new Date().toISOString(),
+        },
+      });
+    }
+    
+    pipelineResults.stages.introGeneration = {
+      generated: !!introduction,
+      length: introduction?.length || 0,
+    };
+    pipelineResults.timing.introGeneration = Date.now() - stage5Start;
+    console.log(`Stage 5 complete: ${pipelineResults.timing.introGeneration}ms`);
+    
+    // ============ COMPLETE ============
+    const totalTime = Date.now() - startTime;
+    pipelineResults.success = true;
+    pipelineResults.totalTime = totalTime;
+    pipelineResults.introduction = introduction;
+    pipelineResults.qualityScore = pipelineResults.stages.profileAggregation?.dataQualityScore || qualityScore;
+    
+    console.log(`\n=== FULL PIPELINE COMPLETED in ${totalTime}ms ===`);
+    console.log('Quality Score:', (pipelineResults.qualityScore * 100).toFixed(0) + '%');
+    
+    return pipelineResults;
+    
+  } catch (error) {
+    console.error('Pipeline error:', error.message);
+    pipelineResults.success = false;
+    pipelineResults.error = error.message;
+    pipelineResults.totalTime = Date.now() - startTime;
+    
+    // Still try to update partner status
+    try {
+      await db.partners.update(partnerId, {
+        researchStatus: 'FAILED',
+      });
+    } catch (e) {}
+    
+    return pipelineResults;
+  }
+}
+
+/**
+ * Extract citation URLs from research results for crawling
+ */
+function extractCitationsForCrawling(results) {
+  const urls = new Set();
+  
+  // From Perplexity person research
+  if (results.personNews?.data?.citations) {
+    for (const citation of results.personNews.data.citations) {
+      if (typeof citation === 'string' && citation.startsWith('http')) {
+        urls.add(citation);
+      }
+    }
+  }
+  
+  // From Perplexity firm research
+  if (results.firmInfo?.data?.citations) {
+    for (const citation of results.firmInfo.data.citations) {
+      if (typeof citation === 'string' && citation.startsWith('http')) {
+        urls.add(citation);
+      }
+    }
+  }
+  
+  // From Tavily results
+  if (results.socialProfiles?.data?.rawResults) {
+    for (const result of results.socialProfiles.data.rawResults) {
+      if (result.url && crawler.shouldCrawl(result.url)) {
+        urls.add(result.url);
+      }
+    }
+  }
+  
+  return Array.from(urls);
+}
+
+/**
+ * Collect all facts from research results
+ */
+function collectAllFacts(results, crawledCitations) {
+  const facts = [];
+  
+  // From Perplexity
+  if (results.personNews?.data) {
+    if (results.personNews.data.deals) {
+      facts.push({ type: 'deals', value: results.personNews.data.deals, source: 'perplexity' });
+    }
+    if (results.personNews.data.newsArticles) {
+      facts.push({ type: 'news', value: results.personNews.data.newsArticles, source: 'perplexity' });
+    }
+  }
+  
+  // From crawled citations
+  for (const crawled of crawledCitations || []) {
+    if (crawled.success && crawled.extractedFacts) {
+      for (const fact of crawled.extractedFacts) {
+        facts.push({
+          ...fact,
+          source: `crawled_${crawled.domain}`,
+        });
+      }
+    }
+  }
+  
+  return facts;
+}
+
+/**
+ * Collect all sources for fact checking
+ */
+function collectAllSources(results, crawledCitations) {
+  const sources = [];
+  
+  if (results.linkedin?.success) {
+    sources.push({ source: 'linkedin', data: results.linkedin.data });
+  }
+  if (results.personNews?.success) {
+    sources.push({ source: 'perplexity', data: results.personNews.data });
+  }
+  if (results.firmInfo?.success) {
+    sources.push({ source: 'perplexity_firm', data: results.firmInfo.data });
+  }
+  if (results.wikipediaPerson?.success) {
+    sources.push({ source: 'wikipedia', data: results.wikipediaPerson.data });
+  }
+  
+  for (const crawled of crawledCitations || []) {
+    if (crawled.success) {
+      sources.push({ source: `crawled_${crawled.domain}`, data: crawled });
+    }
+  }
+  
+  return sources;
+}
+
 module.exports = {
   startResearch,
+  runFullPipeline,
   getResearchStatus,
   getPartnerResearch,
   aggregateResults,
+  extractCitationsForCrawling,
 };
 
