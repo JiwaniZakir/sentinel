@@ -6,6 +6,7 @@ const openaiService = require('../../services/openai');
 const { buildIntroApprovalBlocks } = require('../../templates/adminApproval');
 const { logger } = require('../../utils/logger');
 const researchOrchestrator = require('../../services/research/orchestrator');
+const linkedinService = require('../../services/research/linkedin');
 
 /**
  * Central command router for /partnerbot
@@ -29,6 +30,9 @@ function registerCommandRouter(app) {
     } else if (argsLower.startsWith('test-research')) {
       const linkedinUrl = args.replace(/^test-research\s*/i, '').trim() || 'https://www.linkedin.com/in/harris-stolzenberg-44468b78/';
       await testResearch(respond, client, userId, userIsAdmin, linkedinUrl);
+    } else if (argsLower.startsWith('test-linkedin')) {
+      const linkedinUrl = args.replace(/^test-linkedin\s*/i, '').trim() || 'https://www.linkedin.com/in/harris-stolzenberg-44468b78/';
+      await testLinkedIn(respond, client, userId, userIsAdmin, linkedinUrl);
     } else if (argsLower === 'announce-event') {
       await announceEvent(respond, client, command, userIsAdmin);
     } else if (argsLower.startsWith('add-highlight')) {
@@ -65,6 +69,7 @@ async function showHelp(respond, userIsAdmin) {
 • \`/partnerbot test-onboarding\` — Test components (DB, OpenAI, Slack)
 • \`/partnerbot test-intro-flow\` — Test intro approval buttons (sends DM to you)
 • \`/partnerbot test-research [linkedin_url]\` — Test research pipeline (LinkedIn, Perplexity, Tavily)
+• \`/partnerbot test-linkedin [linkedin_url]\` — Test LinkedIn scraper only (detailed output)
   `;
 
   const blocks = [
@@ -599,6 +604,129 @@ async function testResearch(respond, client, userId, userIsAdmin, linkedinUrl) {
 
     await respond({
       text: `❌ Research test failed: ${error.message}\n\nCheck Railway logs for details.`,
+      response_type: 'ephemeral',
+    });
+  }
+}
+
+/**
+ * Test LinkedIn scraper only - detailed output for debugging
+ */
+async function testLinkedIn(respond, client, userId, userIsAdmin, linkedinUrl) {
+  if (!userIsAdmin) {
+    await respond({
+      text: '⚠️ This command is only available to admins.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  console.log('=== TEST LINKEDIN STARTED ===');
+  console.log('User ID:', userId);
+  console.log('LinkedIn URL:', linkedinUrl);
+
+  // Check configuration
+  const hasCredentials = !!config.linkedinScraper?.email && !!config.linkedinScraper?.password;
+  const email = config.linkedinScraper?.email;
+  const maskedPassword = config.linkedinScraper?.password 
+    ? config.linkedinScraper.password.substring(0, 3) + '***' 
+    : 'NOT SET';
+
+  await respond({
+    text: `🔗 *LinkedIn Scraper Test*\n\n*URL:* ${linkedinUrl}\n*Email:* ${email || 'NOT SET'}\n*Password:* ${maskedPassword}\n*Credentials Configured:* ${hasCredentials ? '✅' : '❌'}\n\n⏳ Starting scrape... This may take 30-60 seconds.\n\n_Watch Railway logs for detailed output._`,
+    response_type: 'ephemeral',
+  });
+
+  if (!hasCredentials) {
+    await respond({
+      text: '❌ *LinkedIn test aborted*\n\nMissing `LINKEDIN_EMAIL` or `LINKEDIN_PASSWORD` environment variables in Railway.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  try {
+    console.log('Starting LinkedIn scrape...');
+    console.log('Email:', email);
+    console.log('Password length:', config.linkedinScraper?.password?.length || 0);
+    
+    const startTime = Date.now();
+    const result = await linkedinService.scrapeProfile(linkedinUrl);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    console.log('LinkedIn scrape completed in', duration, 'seconds');
+    console.log('Result:', JSON.stringify(result, null, 2));
+
+    let resultMessage = `🔗 *LinkedIn Scraper Test Complete* (${duration}s)\n\n`;
+    resultMessage += `*URL:* ${linkedinUrl}\n`;
+    resultMessage += `*Success:* ${result.success ? '✅' : '❌'}\n\n`;
+
+    if (result.success) {
+      const data = result.data;
+      resultMessage += `*📝 Profile Data:*\n`;
+      resultMessage += `• Name: ${data?.name || 'N/A'}\n`;
+      resultMessage += `• Headline: ${data?.headline || data?.job_title || 'N/A'}\n`;
+      resultMessage += `• Company: ${data?.company || 'N/A'}\n`;
+      resultMessage += `• Location: ${data?.location || 'N/A'}\n`;
+      resultMessage += `• Connections: ${data?.connections || 'N/A'}\n\n`;
+
+      if (data?.about) {
+        resultMessage += `*About:*\n>${data.about.substring(0, 200)}${data.about.length > 200 ? '...' : ''}\n\n`;
+      }
+
+      if (data?.experiences?.length > 0) {
+        resultMessage += `*Experience (${data.experiences.length}):*\n`;
+        data.experiences.slice(0, 3).forEach(exp => {
+          resultMessage += `• ${exp.title || 'Role'} at ${exp.company || 'Company'}\n`;
+        });
+        if (data.experiences.length > 3) {
+          resultMessage += `  _...and ${data.experiences.length - 3} more_\n`;
+        }
+        resultMessage += '\n';
+      }
+
+      if (data?.educations?.length > 0) {
+        resultMessage += `*Education (${data.educations.length}):*\n`;
+        data.educations.forEach(edu => {
+          resultMessage += `• ${edu.school || 'School'}\n`;
+        });
+      }
+    } else {
+      resultMessage += `*❌ Error:* ${result.error}\n`;
+      resultMessage += `*Error Type:* ${result.error_type || 'UNKNOWN'}\n\n`;
+
+      // Provide helpful troubleshooting tips
+      if (result.error_type === 'AUTH_FAILED') {
+        resultMessage += `*💡 Troubleshooting:*\n`;
+        resultMessage += `• Verify LINKEDIN_EMAIL and LINKEDIN_PASSWORD in Railway\n`;
+        resultMessage += `• Make sure 2FA is disabled on the LinkedIn account\n`;
+        resultMessage += `• Try logging into LinkedIn manually to check for security prompts\n`;
+        resultMessage += `• LinkedIn may have flagged automated access - try a different account\n`;
+      } else if (result.error_type === 'SCRAPE_ERROR') {
+        resultMessage += `*💡 Troubleshooting:*\n`;
+        resultMessage += `• Check Railway logs for Python stderr output\n`;
+        resultMessage += `• Verify Chromium and chromedriver are installed correctly\n`;
+      }
+
+      if (result.raw_output) {
+        resultMessage += `\n*Raw Output:*\n\`\`\`${result.raw_output.substring(0, 300)}\`\`\`\n`;
+      }
+    }
+
+    await respond({
+      text: resultMessage,
+      response_type: 'ephemeral',
+    });
+
+    console.log('=== TEST LINKEDIN COMPLETED ===');
+
+  } catch (error) {
+    console.error('=== TEST LINKEDIN FAILED ===');
+    console.error('Error:', error.message);
+    console.error('Stack:', error.stack);
+
+    await respond({
+      text: `❌ *LinkedIn test failed*\n\n*Error:* ${error.message}\n\nCheck Railway logs for details.`,
       response_type: 'ephemeral',
     });
   }
