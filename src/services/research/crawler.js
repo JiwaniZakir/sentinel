@@ -3,9 +3,12 @@
  * 
  * Crawls citation URLs from Perplexity to extract additional facts
  * and content about people and companies.
+ * 
+ * Special handling for Twitter/X URLs - uses API instead of scraping.
  */
 
 const { logger } = require('../../utils/logger');
+const config = require('../../config');
 
 // Domain trust scores for quality weighting
 const DOMAIN_TRUST_SCORES = {
@@ -44,17 +47,21 @@ const DOMAIN_TRUST_SCORES = {
   'default': 0.50,
 };
 
-// Blocked domains (don't crawl)
+// Blocked domains (don't crawl - no useful text content)
 const BLOCKED_DOMAINS = [
-  'twitter.com',
-  'x.com',
   'facebook.com',
   'instagram.com',
   'tiktok.com',
   'youtube.com', // Can't extract text
+  'glassdoor.com',
+];
+
+// Special handling domains (use APIs instead of crawling)
+const API_HANDLED_DOMAINS = [
+  'twitter.com',
+  'x.com',
   'reddit.com',
   'quora.com',
-  'glassdoor.com',
 ];
 
 /**
@@ -90,9 +97,42 @@ function getDomainTrustScore(url) {
 function shouldCrawl(url) {
   try {
     const domain = new URL(url).hostname.replace('www.', '');
-    return !BLOCKED_DOMAINS.some(blocked => domain.includes(blocked));
+    
+    // Block certain domains entirely
+    if (BLOCKED_DOMAINS.some(blocked => domain.includes(blocked))) {
+      return false;
+    }
+    
+    // Allow API-handled domains (we'll use APIs instead of crawling)
+    return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Check if URL is a Twitter/X post that should use API
+ */
+function isTwitterUrl(url) {
+  try {
+    const urlObj = new URL(url);
+    const domain = urlObj.hostname.replace('www.', '');
+    return (domain.includes('twitter.com') || domain.includes('x.com')) && 
+           urlObj.pathname.includes('/status/');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Extract tweet ID from Twitter URL
+ */
+function extractTweetId(url) {
+  try {
+    const match = url.match(/\/status\/(\d+)/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
   }
 }
 
@@ -108,12 +148,112 @@ function extractDomain(url) {
 }
 
 /**
+ * Fetch tweet via API
+ */
+async function fetchTweetViaApi(tweetId) {
+  if (!config.twitter.bearerToken) {
+    return {
+      success: false,
+      error: 'Twitter API not configured',
+      error_type: 'AUTH_MISSING',
+    };
+  }
+  
+  try {
+    const response = await fetch(
+      `https://api.twitter.com/2/tweets/${tweetId}?tweet.fields=created_at,public_metrics,author_id,text&expansions=author_id&user.fields=username,name`,
+      {
+        headers: {
+          'Authorization': `Bearer ${config.twitter.bearerToken}`,
+        },
+      }
+    );
+    
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `Twitter API error: ${response.status}`,
+        error_type: 'API_ERROR',
+      };
+    }
+    
+    const data = await response.json();
+    const tweet = data.data;
+    const author = data.includes?.users?.[0];
+    
+    return {
+      success: true,
+      data: {
+        tweetId,
+        text: tweet.text,
+        author: author ? `@${author.username} (${author.name})` : 'Unknown',
+        createdAt: tweet.created_at,
+        likes: tweet.public_metrics?.like_count || 0,
+        retweets: tweet.public_metrics?.retweet_count || 0,
+        replies: tweet.public_metrics?.reply_count || 0,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+      error_type: 'FETCH_ERROR',
+    };
+  }
+}
+
+/**
  * Crawl a URL and extract content
  * Uses fetch + basic HTML parsing (no external dependencies)
+ * Special handling for Twitter URLs - uses API
  */
 async function crawlUrl(url, options = {}) {
   console.log('=== CRAWLING URL ===');
   console.log('URL:', url);
+  
+  // Special handling for Twitter/X URLs
+  if (isTwitterUrl(url)) {
+    console.log('Twitter URL detected, using API');
+    const tweetId = extractTweetId(url);
+    
+    if (!tweetId) {
+      return {
+        success: false,
+        error: 'Could not extract tweet ID from URL',
+        error_type: 'INVALID_URL',
+      };
+    }
+    
+    const tweetData = await fetchTweetViaApi(tweetId);
+    
+    if (!tweetData.success) {
+      return tweetData;
+    }
+    
+    // Format as crawl result
+    return {
+      success: true,
+      url,
+      domain: extractDomain(url),
+      trustScore: 0.7, // Twitter is moderately trustworthy
+      httpStatus: 200,
+      contentType: 'twitter/tweet',
+      title: `Tweet by ${tweetData.data.author}`,
+      author: tweetData.data.author,
+      publishedDate: tweetData.data.createdAt,
+      fullText: tweetData.data.text,
+      summary: tweetData.data.text.substring(0, 200),
+      extractedFacts: [{
+        type: 'social_post',
+        value: tweetData.data.text,
+        confidence: 0.7,
+        context: `Tweet with ${tweetData.data.likes} likes, ${tweetData.data.retweets} retweets`,
+      }],
+      mentionedPeople: [],
+      mentionedCompanies: [],
+      crawledAt: new Date().toISOString(),
+    };
+  }
   
   if (!shouldCrawl(url)) {
     console.log('Domain blocked, skipping');
@@ -563,6 +703,9 @@ module.exports = {
   extractMentions,
   getDomainTrustScore,
   shouldCrawl,
+  isTwitterUrl,
+  extractTweetId,
+  fetchTweetViaApi,
   DOMAIN_TRUST_SCORES,
 };
 
