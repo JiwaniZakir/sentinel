@@ -34,6 +34,7 @@ def find_chromium_binary():
         'chromium-browser',
         '/usr/bin/chromium',
         '/usr/bin/chromium-browser',
+        '/root/.nix-profile/bin/chromium',
     ]
     
     # Try to find chromium in PATH
@@ -53,6 +54,30 @@ def find_chromium_binary():
     return None
 
 
+def find_chromedriver():
+    """Find chromedriver binary path - works on Nix/Railway and local systems."""
+    import shutil
+    
+    # Check environment variable first
+    if os.environ.get('CHROMEDRIVER_PATH'):
+        return os.environ.get('CHROMEDRIVER_PATH')
+    
+    # Common chromedriver paths to check
+    candidates = [
+        'chromedriver',
+        '/usr/bin/chromedriver',
+        '/root/.nix-profile/bin/chromedriver',
+    ]
+    
+    # Try to find chromedriver in PATH
+    for candidate in candidates:
+        path = shutil.which(candidate)
+        if path:
+            return path
+    
+    return None
+
+
 def setup_driver():
     """Set up Chrome/Chromium driver with headless options for server environment."""
     from selenium import webdriver
@@ -68,6 +93,7 @@ def setup_driver():
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--disable-infobars")
+    chrome_options.add_argument("--remote-debugging-port=9222")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     
@@ -82,16 +108,23 @@ def setup_driver():
     else:
         print("Warning: Could not find Chromium binary, using default", file=sys.stderr)
     
-    # Try to use webdriver_manager if available, otherwise use system chromedriver
-    try:
-        from webdriver_manager.chrome import ChromeDriverManager
-        from webdriver_manager.core.os_manager import ChromeType
-        service = Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install())
+    # Find and use system chromedriver (preferred for Nix environments)
+    chromedriver_path = find_chromedriver()
+    if chromedriver_path:
+        print(f"Using chromedriver: {chromedriver_path}", file=sys.stderr)
+        service = Service(executable_path=chromedriver_path)
         driver = webdriver.Chrome(service=service, options=chrome_options)
-    except Exception as e:
-        print(f"webdriver_manager failed ({e}), using system chromedriver", file=sys.stderr)
-        # Fallback to system chromedriver
-        driver = webdriver.Chrome(options=chrome_options)
+    else:
+        print("Using default chromedriver from PATH", file=sys.stderr)
+        # Try webdriver_manager as fallback
+        try:
+            from webdriver_manager.chrome import ChromeDriverManager
+            from webdriver_manager.core.os_manager import ChromeType
+            service = Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install())
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+        except Exception as e:
+            print(f"webdriver_manager failed ({e}), trying default", file=sys.stderr)
+            driver = webdriver.Chrome(options=chrome_options)
     
     # Additional stealth settings
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
