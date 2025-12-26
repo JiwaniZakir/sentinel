@@ -174,19 +174,36 @@ function registerOnboardingActions(app) {
     const channelId = body.channel.id;
     const partnerId = body.actions[0].value;
 
+    console.log('=== PARTNER APPROVE INTRO ===');
+    console.log('User ID:', userId);
+    console.log('Channel ID:', channelId);
+    console.log('Partner ID from button:', partnerId);
+
     try {
       // Get partner data
+      console.log('Step 1: Finding partner by Slack ID...');
       const partner = await db.partners.findBySlackId(userId);
+      console.log('Partner found:', partner ? 'Yes' : 'No');
+      
       if (!partner) {
+        console.error('Partner not found for userId:', userId);
         throw new Error('Partner not found');
       }
+      console.log('Partner data:', JSON.stringify({ id: partner.id, firm: partner.firm, partnerType: partner.partnerType }, null, 2));
 
+      console.log('Step 2: Getting intro message...');
+      console.log('onboardingData exists:', !!partner.onboardingData);
       const introMessage = partner.onboardingData?.pendingIntroMessage;
+      console.log('Intro message exists:', !!introMessage);
+      console.log('Intro message preview:', introMessage?.substring(0, 100));
+      
       if (!introMessage) {
+        console.error('No pending intro message found');
         throw new Error('No pending introduction found');
       }
 
       // Post to #introductions
+      console.log('Step 3: Building intro blocks...');
       const emoji = PARTNER_TYPE_EMOJI[partner.partnerType] || '👋';
       const introBlocks = [
         {
@@ -214,6 +231,9 @@ function registerOnboardingActions(app) {
         },
       ];
 
+      console.log('Step 4: Posting to #introductions...');
+      console.log('Introductions channel ID:', config.channels.introductions);
+      
       if (config.channels.introductions) {
         await slackService.postToChannel(
           client,
@@ -221,10 +241,15 @@ function registerOnboardingActions(app) {
           introBlocks,
           `Welcome ${partner.name} from ${partner.firm}!`
         );
+        console.log('Posted to #introductions successfully');
+      } else {
+        console.log('CHANNEL_INTRODUCTIONS not configured - skipping');
       }
 
       // Mark onboarding as complete
+      console.log('Step 5: Marking onboarding complete...');
       await db.partners.markOnboardingComplete(userId);
+      console.log('Onboarding marked complete');
 
       // Update the DM message
       await client.chat.update({
@@ -265,8 +290,13 @@ function registerOnboardingActions(app) {
         firm: partner.firm,
       });
 
+      console.log('=== PARTNER APPROVE INTRO COMPLETE ===');
       logger.info({ userId, partnerId }, 'Partner approved and posted introduction');
     } catch (error) {
+      console.error('=== PARTNER APPROVE INTRO ERROR ===');
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      console.error('Full error:', JSON.stringify(error.data || error, null, 2));
       logger.error({ error: error.message, userId }, 'Error posting partner introduction');
       
       await client.chat.update({
