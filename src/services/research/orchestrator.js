@@ -725,7 +725,26 @@ async function runFullPipeline(partnerId, linkedinUrl, options = {}) {
     console.log('\n>>> STAGE 4: Profile Aggregation');
     const stage4Start = Date.now();
     
-    const partner = await db.partners.findById(partnerId);
+    let partner = await db.partners.findById(partnerId);
+    
+    // Update partner with researched data if we found real name/firm
+    const researchedName = extractNameFromResearch(researchResults.results);
+    const researchedFirm = extractFirmFromResearch(researchResults.results);
+    
+    if ((researchedName && researchedName !== partner.name) || 
+        (researchedFirm && researchedFirm !== partner.firm)) {
+      console.log('Updating partner with researched data...');
+      console.log('Name:', partner.name, '→', researchedName || partner.name);
+      console.log('Firm:', partner.firm, '→', researchedFirm || partner.firm);
+      
+      await db.partners.update(partner.slackUserId, {
+        name: researchedName || partner.name,
+        firm: researchedFirm || partner.firm,
+      });
+      
+      // Reload partner with updated data
+      partner = await db.partners.findById(partnerId);
+    }
     
     // Build PersonProfile
     const personProfile = await profileAggregator.buildPersonProfile(
@@ -821,6 +840,43 @@ async function runFullPipeline(partnerId, linkedinUrl, options = {}) {
     
     return pipelineResults;
   }
+}
+
+/**
+ * Extract actual name from research results
+ */
+function extractNameFromResearch(results) {
+  // Priority: LinkedIn > Wikipedia > Perplexity
+  if (results.linkedin?.data?.name) {
+    return results.linkedin.data.name;
+  }
+  if (results.wikipediaPerson?.data?.title) {
+    return results.wikipediaPerson.data.title;
+  }
+  if (results.personNews?.data?.name) {
+    return results.personNews.data.name;
+  }
+  return null;
+}
+
+/**
+ * Extract actual firm from research results
+ */
+function extractFirmFromResearch(results) {
+  // Priority: LinkedIn > Perplexity > Wikipedia
+  if (results.linkedin?.data?.currentCompany) {
+    return results.linkedin.data.currentCompany;
+  }
+  if (results.linkedin?.data?.company) {
+    return results.linkedin.data.company;
+  }
+  if (results.firmInfo?.data?.name) {
+    return results.firmInfo.data.name;
+  }
+  if (results.wikipediaCompany?.data?.title) {
+    return results.wikipediaCompany.data.title;
+  }
+  return null;
 }
 
 /**
@@ -1011,5 +1067,7 @@ module.exports = {
   getPartnerResearch,
   aggregateResults,
   extractCitationsForCrawling,
+  extractNameFromResearch,
+  extractFirmFromResearch,
 };
 
