@@ -180,7 +180,7 @@ async function testOnboarding(respond, client, userId, userIsAdmin) {
         'Test User'
       );
       console.log('OpenAI response type:', testResponse.type);
-      console.log('OpenAI response preview:', testResponse.message?.substring(0, 100));
+      console.log('OpenAI response:', testResponse.message);
     } catch (openaiError) {
       console.error('OpenAI Error:', openaiError.message);
       console.error('OpenAI Full Error:', openaiError);
@@ -535,7 +535,9 @@ async function testResearch(respond, client, userId, userIsAdmin, linkedinUrl) {
       resultMessage += `• Name: ${li?.name || 'N/A'}\n`;
       resultMessage += `• Headline: ${li?.headline || 'N/A'}\n`;
       resultMessage += `• Location: ${li?.location || 'N/A'}\n`;
-      resultMessage += `• About: ${li?.about?.substring(0, 100) || 'N/A'}...\n`;
+      if (li?.about) {
+        resultMessage += `• About: ${li.about}\n`;
+      }
       resultMessage += `• Experiences: ${li?.experiences?.length || 0} found\n\n`;
     } else if (researchResults.results?.linkedin?.error) {
       resultMessage += `*📝 LinkedIn:* ❌ ${researchResults.results.linkedin.error}\n\n`;
@@ -547,7 +549,9 @@ async function testResearch(respond, client, userId, userIsAdmin, linkedinUrl) {
     if (researchResults.results?.personNews?.success) {
       const pn = researchResults.results.personNews.data;
       resultMessage += `*🔍 Perplexity (Person):* ✅\n`;
-      resultMessage += `• Summary: ${pn?.summary?.substring(0, 150) || 'Available'}...\n`;
+      if (pn?.summary) {
+        resultMessage += `• Summary:\n${pn.summary}\n`;
+      }
       resultMessage += `• Citations: ${pn?.citations?.length || 0} sources\n\n`;
     } else if (researchResults.results?.personNews?.error) {
       resultMessage += `*🔍 Perplexity (Person):* ❌ ${researchResults.results.personNews.error}\n\n`;
@@ -556,7 +560,11 @@ async function testResearch(respond, client, userId, userIsAdmin, linkedinUrl) {
     if (researchResults.results?.firmInfo?.success) {
       const fi = researchResults.results.firmInfo.data;
       resultMessage += `*🏢 Perplexity (Firm):* ✅\n`;
-      resultMessage += `• Overview: ${fi?.overview?.substring(0, 150) || 'Available'}...\n\n`;
+      if (fi?.overview) {
+        resultMessage += `• Overview:\n${fi.overview}\n\n`;
+      } else {
+        resultMessage += `• Overview: Available\n\n`;
+      }
     } else if (researchResults.results?.firmInfo?.error) {
       resultMessage += `*🏢 Perplexity (Firm):* ❌ ${researchResults.results.firmInfo.error}\n\n`;
     } else if (!apiStatus.perplexity) {
@@ -690,7 +698,7 @@ async function testLinkedIn(respond, client, userId, userIsAdmin, linkedinUrl) {
       resultMessage += `• Connections: ${data?.connections || 'N/A'}\n\n`;
 
       if (data?.about) {
-        resultMessage += `*About:*\n>${data.about.substring(0, 200)}${data.about.length > 200 ? '...' : ''}\n\n`;
+        resultMessage += `*About:*\n>${data.about}\n\n`;
       }
 
       if (data?.experiences?.length > 0) {
@@ -728,7 +736,7 @@ async function testLinkedIn(respond, client, userId, userIsAdmin, linkedinUrl) {
       }
 
       if (result.raw_output) {
-        resultMessage += `\n*Raw Output:*\n\`\`\`${result.raw_output.substring(0, 300)}\`\`\`\n`;
+        resultMessage += `\n*Raw Output:*\n\`\`\`${result.raw_output}\`\`\`\n`;
       }
     }
 
@@ -848,8 +856,7 @@ async function testPerplexity(respond, client, userId, userIsAdmin, nameAndFirm)
       const data = firmResult.data;
       
       if (data.overview) {
-        const overviewPreview = data.overview.length > 300 ? data.overview.substring(0, 300) + '...' : data.overview;
-        resultMessage += `\n*Overview:*\n>${overviewPreview}\n`;
+        resultMessage += `\n*Overview:*\n>${data.overview}\n`;
       }
 
       if (data.leadership) {
@@ -873,10 +880,7 @@ async function testPerplexity(respond, client, userId, userIsAdmin, nameAndFirm)
     if (personResult.data?.rawContent) {
       resultMessage += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
       resultMessage += `*📄 Raw Person Research:*\n`;
-      const rawPreview = personResult.data.rawContent.length > 500 
-        ? personResult.data.rawContent.substring(0, 500) + '...' 
-        : personResult.data.rawContent;
-      resultMessage += `>${rawPreview.split('\n').join('\n>')}\n`;
+      resultMessage += `>${personResult.data.rawContent.split('\n').join('\n>')}\n`;
     }
 
     await respond({
@@ -962,8 +966,7 @@ async function testTavilyLinkedIn(respond, client, userId, userIsAdmin, linkedin
       resultMessage += `• LinkedIn URL: ${data?.linkedinUrl || 'N/A'}\n\n`;
 
       if (data?.about) {
-        const aboutPreview = data.about.length > 300 ? data.about.substring(0, 300) + '...' : data.about;
-        resultMessage += `*About:*\n>${aboutPreview}\n\n`;
+        resultMessage += `*About:*\n>${data.about}\n\n`;
       }
 
       if (data?.experiences?.length > 0) {
@@ -990,8 +993,7 @@ async function testTavilyLinkedIn(respond, client, userId, userIsAdmin, linkedin
       }
 
       if (data?.answer) {
-        const answerPreview = data.answer.length > 400 ? data.answer.substring(0, 400) + '...' : data.answer;
-        resultMessage += `*🤖 AI Summary:*\n>${answerPreview}\n\n`;
+        resultMessage += `*🤖 AI Summary:*\n>${data.answer}\n\n`;
       }
 
       // Show raw results count
@@ -1080,15 +1082,11 @@ async function testWikipedia(respond, client, userId, userIsAdmin, nameAndFirm) 
       }
       
       if (data.summary) {
-        const summaryPreview = data.summary.length > 400 ? data.summary.substring(0, 400) + '...' : data.summary;
-        resultMessage += `\n*Summary:*\n>${summaryPreview}\n`;
+        resultMessage += `\n*Summary:*\n>${data.summary}\n`;
       }
       
       if (data.career_info?.raw_career) {
-        const careerPreview = data.career_info.raw_career.length > 300 
-          ? data.career_info.raw_career.substring(0, 300) + '...' 
-          : data.career_info.raw_career;
-        resultMessage += `\n*Career Info:*\n>${careerPreview}\n`;
+        resultMessage += `\n*Career Info:*\n>${data.career_info.raw_career}\n`;
       }
       
       if (data.categories?.length > 0) {
@@ -1115,15 +1113,11 @@ async function testWikipedia(respond, client, userId, userIsAdmin, nameAndFirm) 
       }
       
       if (data.summary) {
-        const summaryPreview = data.summary.length > 400 ? data.summary.substring(0, 400) + '...' : data.summary;
-        resultMessage += `\n*Summary:*\n>${summaryPreview}\n`;
+        resultMessage += `\n*Summary:*\n>${data.summary}\n`;
       }
       
       if (data.company_info?.founding_info) {
-        const foundingPreview = data.company_info.founding_info.length > 300 
-          ? data.company_info.founding_info.substring(0, 300) + '...' 
-          : data.company_info.founding_info;
-        resultMessage += `\n*History/Founding:*\n>${foundingPreview}\n`;
+        resultMessage += `\n*History/Founding:*\n>${data.company_info.founding_info}\n`;
       }
       
       if (data.categories?.length > 0) {
@@ -1256,11 +1250,8 @@ async function testFullPipeline(respond, client, userId, userIsAdmin, linkedinUr
     // Show the generated introduction
     if (pipelineResults.introduction) {
       resultMessage += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-      resultMessage += `*Generated Introduction Preview:*\n\n`;
-      const introPreview = pipelineResults.introduction.length > 500 
-        ? pipelineResults.introduction.substring(0, 500) + '...' 
-        : pipelineResults.introduction;
-      resultMessage += introPreview + '\n\n';
+      resultMessage += `*Generated Introduction:*\n\n`;
+      resultMessage += pipelineResults.introduction + '\n\n';
     }
     
     resultMessage += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
