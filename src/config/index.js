@@ -17,6 +17,7 @@ const config = {
   // Research APIs
   research: {
     enabled: process.env.RESEARCH_ENABLED !== 'false',
+    useFullPipeline: process.env.RESEARCH_USE_FULL_PIPELINE !== 'false', // Default: true
     rateLimit: parseInt(process.env.RESEARCH_RATE_LIMIT) || 20,
     linkedin: {
       email: process.env.LINKEDIN_EMAIL,
