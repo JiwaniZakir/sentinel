@@ -44,6 +44,13 @@ const config = {
     userAgent: process.env.REDDIT_USER_AGENT || 'FoundryBot/1.0',
   },
 
+  // Podcast Analysis (opt-in, uses Whisper + GPT-4)
+  podcast: {
+    enabled: process.env.PODCAST_ANALYSIS_ENABLED === 'true',
+    maxPodcastsPerPartner: parseInt(process.env.MAX_PODCASTS_PER_PARTNER) || 3,
+    maxDurationMinutes: parseInt(process.env.MAX_PODCAST_DURATION_MINUTES) || 90,
+  },
+
   // Database
   databaseUrl: process.env.DATABASE_URL,
 

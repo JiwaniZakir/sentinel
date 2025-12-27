@@ -16,6 +16,9 @@ const linkedin = require('./linkedin');
 const perplexity = require('./perplexity');
 const tavily = require('./tavily');
 const wikipedia = require('./wikipedia');
+const twitter = require('./twitter');
+const reddit = require('./reddit');
+const podcast = require('./podcast');
 const crawler = require('./crawler');
 const qualityScorer = require('./qualityScorer');
 const profileAggregator = require('./profileAggregator');
@@ -40,6 +43,9 @@ module.exports = {
   perplexity,
   tavily,
   wikipedia,
+  twitter,
+  reddit,
+  podcast,
   
   // ============ PROCESSING SERVICES ============
   

@@ -45,6 +45,8 @@ enum ResearchType {
   COMPANY_BACKGROUND   // Wikipedia company data
   CITATION_CRAWL       // Crawled article from citation
   TWITTER_PROFILE      // Twitter/X profile and tweets
+  REDDIT_ACTIVITY      // Reddit posts and comments
+  PODCAST_ANALYSIS     // Podcast transcription and analysis
 }
 
 enum ResearchStatus {

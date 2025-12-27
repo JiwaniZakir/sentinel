@@ -1,5 +1,9 @@
+# Core dependencies (always required)
 linkedin-scraper==2.11.2
 selenium==4.15.0
 webdriver-manager==4.0.1
 Wikipedia-API==0.6.0
+
+# Optional: Podcast analysis (enable with PODCAST_ANALYSIS_ENABLED=true)
+# yt-dlp  # Uncomment to enable podcast transcription from YouTube
 
