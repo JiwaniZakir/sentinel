@@ -106,7 +106,8 @@ async function handleDM(app) {
         });
         
         // Start research in background (don't block the conversation)
-        // Pass any name/firm we have from the conversation so far
+        // Pass partner's self-reported name/firm as context for research
+        // Research will supplement their input, not replace it
         triggerResearchAsync(
           userId, 
           linkedinUrl, 

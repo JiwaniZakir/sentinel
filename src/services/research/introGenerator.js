@@ -85,14 +85,16 @@ async function generateRichIntro(partnerId, options = {}) {
  */
 function buildIntroContext(partner, personProfile, firmProfile, verifiedFacts) {
   const context = {
-    // Core identity
+    // Core identity (from partner input - PRIMARY SOURCE OF TRUTH)
+    // These are what the partner told us during onboarding
     name: partner.name,
     firm: partner.firm,
     role: partner.role,
     partnerType: partner.partnerType,
     emoji: PARTNER_TYPE_EMOJI[partner.partnerType] || '👋',
     
-    // Onboarding responses (self-reported)
+    // Onboarding responses (self-reported - PRIMARY SOURCE OF TRUTH)
+    // Everything the partner shared during the conversation
     onboarding: partner.onboardingData || {},
     
     // LinkedIn/Professional
@@ -174,9 +176,11 @@ RULES:
 2. Include 2-3 SPECIFIC achievements, deals, or interesting facts
 3. If they have a fun fact or personal interest, include it
 4. End with connection opportunities (what they can offer OR are looking for)
-5. Use their self-reported information (origin story, superpower) when available
-6. Only mention verified facts or self-reported information - never fabricate
-7. If data quality is low (< 0.5), rely more on onboarding responses
+5. PRIORITIZE self-reported onboarding information (origin story, superpower, what they told us)
+6. Use research to SUPPLEMENT and add context (background, achievements, press)
+7. If onboarding and research conflict, TRUST the onboarding data (what they said)
+8. Only mention verified facts or self-reported information - never fabricate
+9. If data quality is low (< 0.5), rely entirely on onboarding responses
 
 DO NOT:
 - Use phrases like "experienced investor" or "seasoned professional" without specifics

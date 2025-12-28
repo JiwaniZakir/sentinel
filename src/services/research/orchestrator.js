@@ -758,12 +758,20 @@ async function runFullPipeline(partnerId, linkedinUrl, options = {}) {
     
     let partner = await db.partners.findById(partnerId);
     
-    // Update partner with researched data if we found real name/firm
-    // (researchedName and researchedFirm already extracted in Stage 2)
+    // Store researched name/firm but DON'T override partner's self-reported data
+    // Partner input is source of truth, research supplements it
+    console.log('Partner self-reported:', partner.name, 'at', partner.firm);
+    console.log('Research found:', researchedName, 'at', researchedFirm);
+    console.log('Using partner input as primary, research as supplementary context');
     
-    if ((researchedName && researchedName !== partner.name) || 
-        (researchedFirm && researchedFirm !== partner.firm)) {
-      console.log('Updating partner with researched data...');
+    // Only update if partner data is placeholder/empty
+    const needsUpdate = (
+      (!partner.name || partner.name === 'Pending' || partner.name === 'Unknown') ||
+      (!partner.firm || partner.firm === 'Pending' || partner.firm === 'Unknown')
+    );
+    
+    if (needsUpdate && (researchedName || researchedFirm)) {
+      console.log('Partner data is placeholder, updating with research...');
       console.log('Name:', partner.name, '→', researchedName || partner.name);
       console.log('Firm:', partner.firm, '→', researchedFirm || partner.firm);
       
