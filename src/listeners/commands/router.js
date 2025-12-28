@@ -1217,12 +1217,15 @@ async function testFullPipeline(respond, client, userId, userIsAdmin, linkedinUr
     console.log('Step 2: Running full pipeline...');
     const startTime = Date.now();
     
+    // Extract name from LinkedIn URL (best effort)
+    const urlMatch = linkedinUrl.match(/linkedin\.com\/in\/([^\/]+)/);
+    const linkedinUsername = urlMatch ? urlMatch[1] : null;
+    
     const pipelineResults = await researchOrchestrator.runFullPipeline(
       testPartner.id,
       linkedinUrl,
       {
-        name: 'Harris Stolzenberg',
-        firm: 'Pear VC',
+        // Don't pass name/firm - let the pipeline extract from LinkedIn
         partnerType: 'VC',
         generateIntro: true,
         crawlCitations: true,

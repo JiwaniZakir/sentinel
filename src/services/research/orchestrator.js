@@ -611,17 +611,20 @@ async function runFullPipeline(partnerId, linkedinUrl, options = {}) {
     console.log('\n>>> STAGE 2: Citation Crawling');
     const stage2Start = Date.now();
     
+    // Extract name and firm from research results BEFORE crawling
+    const researchedName = extractNameFromResearch(researchResults.results);
+    const researchedFirm = extractFirmFromResearch(researchResults.results);
+    
     let crawledCitations = [];
     const citations = extractCitationsForCrawling(researchResults.results);
     
     if (citations.length > 0 && options.crawlCitations !== false) {
       console.log(`Found ${citations.length} citations to crawl`);
       
-      const partner = await db.partners.findById(partnerId);
       crawledCitations = await crawler.crawlUrls(citations.slice(0, 10), {
         maxConcurrent: 3,
-        personName: partner?.name,
-        firmName: partner?.firm,
+        personName: researchedName || options.name,
+        firmName: researchedFirm || options.firm,
       });
       
       // Save crawled data
@@ -696,7 +699,7 @@ async function runFullPipeline(partnerId, linkedinUrl, options = {}) {
         await db.prisma.verifiedFact.create({
           data: {
             factType: fact.fact.type || 'general',
-            subject: options.name || 'unknown',
+            subject: researchedName || options.name || 'unknown',
             value: typeof fact.fact.value === 'string' ? fact.fact.value : JSON.stringify(fact.fact.value),
             context: fact.fact.context,
             status: fact.status.toUpperCase().replace(/_/g, '_'),
@@ -728,8 +731,7 @@ async function runFullPipeline(partnerId, linkedinUrl, options = {}) {
     let partner = await db.partners.findById(partnerId);
     
     // Update partner with researched data if we found real name/firm
-    const researchedName = extractNameFromResearch(researchResults.results);
-    const researchedFirm = extractFirmFromResearch(researchResults.results);
+    // (researchedName and researchedFirm already extracted in Stage 2)
     
     if ((researchedName && researchedName !== partner.name) || 
         (researchedFirm && researchedFirm !== partner.firm)) {
