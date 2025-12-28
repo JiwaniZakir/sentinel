@@ -28,6 +28,8 @@ function registerCommandRouter(app) {
     // Route based on subcommand
     if (argsLower === '' || argsLower === 'help') {
       await showHelp(respond, userIsAdmin);
+    } else if (argsLower === 'intro') {
+      await startIntro(respond, client, userId);
     } else if (argsLower === 'test-onboarding') {
       await testOnboarding(respond, client, userId, userIsAdmin);
     } else if (argsLower === 'test-intro-flow') {
@@ -77,6 +79,73 @@ function registerCommandRouter(app) {
       });
     }
   });
+}
+
+/**
+ * Start or restart onboarding via intro command
+ */
+async function startIntro(respond, client, userId) {
+  try {
+    const slackService = require('../../services/slack');
+    const openaiService = require('../../services/openai');
+    const db = require('../../services/database');
+    const { buildTextBlocks } = require('../../templates/welcomeDM');
+    
+    // Get user's display name
+    const displayName = await slackService.getUserDisplayName(client, userId);
+    
+    // Check if user already has an active conversation
+    const activeConversation = await db.conversations.findActive(userId);
+    
+    if (activeConversation) {
+      // Already have an active onboarding
+      await respond({
+        text: `👋 You already have an onboarding conversation in progress! Check your DMs to continue, or say "restart" in the DM to start over.`,
+        response_type: 'ephemeral',
+      });
+      return;
+    }
+    
+    // Open DM with user
+    const dmResult = await client.conversations.open({ users: userId });
+    const dmChannel = dmResult.channel.id;
+    
+    // Create new conversation
+    const conversation = await db.conversations.create(userId);
+    
+    // Get initial AI response
+    const aiResponse = await openaiService.generateOnboardingResponse(
+      [],
+      `Hi, I'm ${displayName} and I'm ready to start the onboarding.`,
+      displayName
+    );
+    
+    // Save messages
+    await db.conversations.addMessage(conversation.id, 'user', `Hi, I'm ${displayName} and I'm ready to start the onboarding.`);
+    await db.conversations.addMessage(conversation.id, 'assistant', aiResponse.message);
+    
+    // Send message to DM
+    await client.chat.postMessage({
+      channel: dmChannel,
+      blocks: buildTextBlocks(aiResponse.message),
+      text: aiResponse.message,
+    });
+    
+    // Confirm to user
+    await respond({
+      text: `✅ Check your DMs! I've started your onboarding conversation. 💬`,
+      response_type: 'ephemeral',
+    });
+    
+    console.log(`Started onboarding for ${userId} via /partnerbot intro command`);
+    
+  } catch (error) {
+    console.error('Error starting intro:', error);
+    await respond({
+      text: `❌ Sorry, I couldn't start the onboarding. Error: ${error.message}`,
+      response_type: 'ephemeral',
+    });
+  }
 }
 
 /**
