@@ -82,6 +82,9 @@ async function handleDM(app) {
       const linkedinMatch = userMessage.match(LINKEDIN_URL_REGEX);
       let researchContext = null;
       
+      // Get existing partner data if available (used for research and context)
+      const existingPartner = await db.partners.findBySlackId(userId);
+      
       if (linkedinMatch && config.research.enabled) {
         const linkedinUrl = linkedinMatch[0];
         console.log('LinkedIn URL detected:', linkedinUrl);
@@ -104,7 +107,6 @@ async function handleDM(app) {
         
         // Start research in background (don't block the conversation)
         // Pass any name/firm we have from the conversation so far
-        const existingPartner = await db.partners.findBySlackId(userId);
         triggerResearchAsync(
           userId, 
           linkedinUrl, 
@@ -114,13 +116,11 @@ async function handleDM(app) {
         );
         
         // Check if we already have research from a previous message
-        const existingPartner = await db.partners.findBySlackId(userId);
         if (existingPartner?.researchSummary) {
           researchContext = research.generateAIContext(existingPartner.researchSummary);
         }
       } else {
         // Check for existing research context
-        const existingPartner = await db.partners.findBySlackId(userId);
         if (existingPartner?.researchSummary) {
           researchContext = research.generateAIContext(existingPartner.researchSummary);
         }
