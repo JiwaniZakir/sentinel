@@ -446,13 +446,378 @@ def scrape_profile(linkedin_url, email=None, password=None):
                 pass
 
 
+def load_cookies_to_driver(driver, cookies):
+    """Load cookies into the driver session."""
+    if not cookies:
+        return False
+    
+    try:
+        # Navigate to LinkedIn first (required for cookies)
+        driver.get("https://www.linkedin.com")
+        time.sleep(1)
+        
+        # Add each cookie
+        for cookie in cookies:
+            try:
+                cookie_dict = {
+                    'name': cookie.get('name'),
+                    'value': cookie.get('value'),
+                    'domain': cookie.get('domain', '.linkedin.com'),
+                    'path': cookie.get('path', '/'),
+                }
+                
+                # Add optional fields
+                if 'expiry' in cookie:
+                    cookie_dict['expiry'] = cookie['expiry']
+                if 'httpOnly' in cookie:
+                    cookie_dict['httpOnly'] = cookie['httpOnly']
+                if 'secure' in cookie:
+                    cookie_dict['secure'] = cookie['secure']
+                
+                driver.add_cookie(cookie_dict)
+                
+            except Exception as e:
+                print(f"Failed to add cookie {cookie.get('name')}: {e}", file=sys.stderr)
+        
+        print(f"Loaded {len(cookies)} cookies into driver", file=sys.stderr)
+        return True
+        
+    except Exception as e:
+        print(f"Failed to load cookies: {e}", file=sys.stderr)
+        return False
+
+
+def get_cookies_from_driver(driver):
+    """Extract all cookies from the driver session."""
+    try:
+        cookies = driver.get_cookies()
+        print(f"Extracted {len(cookies)} cookies from driver", file=sys.stderr)
+        return cookies
+    except Exception as e:
+        print(f"Failed to extract cookies: {e}", file=sys.stderr)
+        return []
+
+
+def wait_for_verification_code(gmail_email, gmail_app_password, timeout=60):
+    """
+    Wait for a LinkedIn verification code via email (IMAP).
+    This is a Python implementation matching the Node.js emailVerification service.
+    """
+    import imaplib
+    import email
+    from email.header import decode_header
+    import re
+    
+    print(f"Waiting for verification code at {gmail_email}...", file=sys.stderr)
+    
+    start_time = time.time()
+    check_interval = 3  # Check every 3 seconds
+    
+    while time.time() - start_time < timeout:
+        try:
+            # Connect to Gmail IMAP
+            mail = imaplib.IMAP4_SSL('imap.gmail.com')
+            mail.login(gmail_email, gmail_app_password)
+            mail.select('INBOX')
+            
+            # Search for recent unread emails from LinkedIn
+            result, data = mail.search(None, '(UNSEEN FROM "linkedin.com")')
+            
+            if result == 'OK':
+                email_ids = data[0].split()
+                
+                for email_id in email_ids:
+                    # Fetch the email
+                    result, msg_data = mail.fetch(email_id, '(RFC822)')
+                    
+                    if result == 'OK':
+                        raw_email = msg_data[0][1]
+                        msg = email.message_from_bytes(raw_email)
+                        
+                        # Get subject
+                        subject = decode_header(msg['Subject'])[0][0]
+                        if isinstance(subject, bytes):
+                            subject = subject.decode()
+                        
+                        # Check if it's a verification email
+                        if 'verification' in subject.lower():
+                            print(f"Found verification email: {subject}", file=sys.stderr)
+                            
+                            # Get email body
+                            body = ""
+                            if msg.is_multipart():
+                                for part in msg.walk():
+                                    if part.get_content_type() == "text/plain":
+                                        body = part.get_payload(decode=True).decode()
+                                        break
+                            else:
+                                body = msg.get_payload(decode=True).decode()
+                            
+                            # Extract code (6 digits)
+                            code_patterns = [
+                                r'verification code:?\s*(\d{6})',
+                                r'your code:?\s*(\d{6})',
+                                r'code:?\s*(\d{6})',
+                                r'(\d{6})\s*is your',
+                            ]
+                            
+                            for pattern in code_patterns:
+                                match = re.search(pattern, body, re.IGNORECASE)
+                                if match:
+                                    code = match.group(1)
+                                    print(f"Extracted verification code: {code}", file=sys.stderr)
+                                    mail.logout()
+                                    return code
+            
+            mail.logout()
+            
+        except Exception as e:
+            print(f"Error checking email: {e}", file=sys.stderr)
+        
+        # Wait before next check
+        time.sleep(check_interval)
+    
+    print(f"No verification code found after {timeout}s", file=sys.stderr)
+    return None
+
+
+def scrape_with_session(linkedin_url, email, password, cookies=None, gmail_email=None, gmail_app_password=None):
+    """
+    Enhanced scraper that supports session cookies and email verification.
+    """
+    driver = None
+    
+    try:
+        # Set up driver
+        driver = setup_driver()
+        
+        # Try to use existing session first
+        if cookies:
+            print("Attempting to use existing session cookies...", file=sys.stderr)
+            load_cookies_to_driver(driver, cookies)
+            
+            # Navigate to profile to test session
+            driver.get(linkedin_url)
+            time.sleep(3)
+            
+            # Check if we're logged in (not redirected to login page)
+            if "login" not in driver.current_url and "checkpoint" not in driver.current_url:
+                print("Session cookies still valid!", file=sys.stderr)
+            else:
+                print("Session expired, need to login", file=sys.stderr)
+                cookies = None  # Force login
+        
+        # Login if no valid session
+        if not cookies:
+            print("Logging in to LinkedIn...", file=sys.stderr)
+            login_success, login_error = login_to_linkedin(driver, email, password)
+            
+            if not login_success:
+                # Check if verification is required
+                if "checkpoint" in driver.current_url or "verification" in driver.current_url:
+                    print("Verification required!", file=sys.stderr)
+                    
+                    if gmail_email and gmail_app_password:
+                        print("Attempting email verification...", file=sys.stderr)
+                        
+                        # Wait for verification code via email
+                        code = wait_for_verification_code(gmail_email, gmail_app_password)
+                        
+                        if code:
+                            # Submit verification code
+                            try:
+                                code_input = driver.find_element("id", "input__email_verification_pin")
+                                code_input.send_keys(code)
+                                time.sleep(1)
+                                
+                                submit_btn = driver.find_element("css selector", "button[type='submit']")
+                                submit_btn.click()
+                                time.sleep(5)
+                                
+                                # Check if verification succeeded
+                                if "feed" in driver.current_url or "/in/" in driver.current_url:
+                                    print("Verification successful!", file=sys.stderr)
+                                    login_success = True
+                                else:
+                                    return {
+                                        "success": False,
+                                        "error": "Verification code submission failed",
+                                        "error_type": "VERIFICATION_FAILED"
+                                    }
+                                    
+                            except Exception as e:
+                                return {
+                                    "success": False,
+                                    "error": f"Failed to submit verification code: {e}",
+                                    "error_type": "VERIFICATION_ERROR"
+                                }
+                        else:
+                            return {
+                                "success": False,
+                                "error": "No verification code received",
+                                "error_type": "NO_VERIFICATION_CODE"
+                            }
+                    else:
+                        return {
+                            "success": False,
+                            "error": login_error or "Verification required but no Gmail credentials provided",
+                            "error_type": "VERIFICATION_REQUIRED"
+                        }
+                else:
+                    return {
+                        "success": False,
+                        "error": login_error or "Failed to login to LinkedIn",
+                        "error_type": "AUTH_FAILED"
+                    }
+        
+        # Save updated cookies
+        new_cookies = get_cookies_from_driver(driver)
+        
+        # Add delay to avoid rate limiting
+        time.sleep(2)
+        
+        # Scrape the profile
+        person = Person(linkedin_url, driver=driver, scrape=True, close_on_complete=False)
+        
+        # Extract experiences
+        experiences = []
+        if hasattr(person, 'experiences') and person.experiences:
+            for exp in person.experiences:
+                experiences.append({
+                    "company": getattr(exp, 'institution_name', None) or getattr(exp, 'company', None),
+                    "title": getattr(exp, 'position_title', None) or getattr(exp, 'title', None),
+                    "duration": getattr(exp, 'duration', None),
+                    "description": getattr(exp, 'description', None),
+                    "location": getattr(exp, 'location', None),
+                    "from_date": getattr(exp, 'from_date', None),
+                    "to_date": getattr(exp, 'to_date', None),
+                })
+        
+        # Extract education
+        educations = []
+        if hasattr(person, 'educations') and person.educations:
+            for edu in person.educations:
+                educations.append({
+                    "school": getattr(edu, 'institution_name', None) or getattr(edu, 'school', None),
+                    "degree": getattr(edu, 'degree', None),
+                    "field": getattr(edu, 'field_of_study', None),
+                    "from_date": getattr(edu, 'from_date', None),
+                    "to_date": getattr(edu, 'to_date', None),
+                    "description": getattr(edu, 'description', None),
+                })
+        
+        # Extract interests
+        interests = []
+        if hasattr(person, 'interests') and person.interests:
+            for interest in person.interests:
+                interests.append(getattr(interest, 'title', str(interest)))
+        
+        # Extract accomplishments
+        accomplishments = []
+        if hasattr(person, 'accomplishments') and person.accomplishments:
+            for acc in person.accomplishments:
+                accomplishments.append({
+                    "category": getattr(acc, 'category', None),
+                    "title": getattr(acc, 'title', str(acc)),
+                })
+        
+        # Build the result
+        result = {
+            "success": True,
+            "scraped_at": datetime.utcnow().isoformat() + "Z",
+            "linkedin_url": linkedin_url,
+            "cookies": new_cookies,  # Return updated cookies
+            "data": {
+                "name": person.name,
+                "headline": getattr(person, 'job_title', None),
+                "about": person.about if hasattr(person, 'about') else None,
+                "location": getattr(person, 'location', None),
+                "company": person.company,
+                "job_title": person.job_title,
+                "experiences": experiences,
+                "educations": educations,
+                "interests": interests,
+                "accomplishments": accomplishments,
+                "connections": getattr(person, 'connections', None),
+            }
+        }
+        
+        return result
+        
+    except Exception as e:
+        error_type = "SCRAPE_ERROR"
+        if "rate" in str(e).lower() or "limit" in str(e).lower():
+            error_type = "RATE_LIMITED"
+        elif "auth" in str(e).lower() or "login" in str(e).lower():
+            error_type = "AUTH_FAILED"
+        elif "not found" in str(e).lower() or "404" in str(e):
+            error_type = "PROFILE_NOT_FOUND"
+            
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": error_type,
+            "linkedin_url": linkedin_url
+        }
+        
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except:
+                pass
+
+
 def main():
-    parser = argparse.ArgumentParser(description='Scrape LinkedIn profiles')
-    parser.add_argument('linkedin_url', help='LinkedIn profile URL to scrape')
+    parser = argparse.ArgumentParser(description='Scrape LinkedIn profiles with session management')
+    parser.add_argument('--stdin', action='store_true', help='Read JSON input from stdin')
+    parser.add_argument('linkedin_url', nargs='?', help='LinkedIn profile URL to scrape')
     parser.add_argument('--email', help='LinkedIn email (or use LINKEDIN_EMAIL env var)')
     parser.add_argument('--password', help='LinkedIn password (or use LINKEDIN_PASSWORD env var)')
     
     args = parser.parse_args()
+    
+    # Read input from stdin (new mode for session management)
+    if args.stdin:
+        try:
+            input_data = json.loads(sys.stdin.read())
+            linkedin_url = input_data.get('url')
+            email = input_data.get('email')
+            password = input_data.get('password')
+            cookies = input_data.get('cookies')
+            gmail_email = input_data.get('gmail_email')
+            gmail_app_password = input_data.get('gmail_app_password')
+            
+            result = scrape_with_session(
+                linkedin_url,
+                email,
+                password,
+                cookies=cookies,
+                gmail_email=gmail_email,
+                gmail_app_password=gmail_app_password
+            )
+            
+            print(json.dumps(result, indent=2, default=str))
+            sys.exit(0 if result.get('success') else 1)
+            
+        except Exception as e:
+            result = {
+                "success": False,
+                "error": f"Failed to parse stdin input: {e}",
+                "error_type": "INPUT_ERROR"
+            }
+            print(json.dumps(result))
+            sys.exit(1)
+    
+    # Original command-line mode (legacy support)
+    if not args.linkedin_url:
+        result = {
+            "success": False,
+            "error": "No LinkedIn URL provided",
+            "error_type": "INVALID_INPUT"
+        }
+        print(json.dumps(result))
+        sys.exit(1)
     
     # Validate URL
     if 'linkedin.com' not in args.linkedin_url:
@@ -464,7 +829,7 @@ def main():
         print(json.dumps(result))
         sys.exit(1)
     
-    # Scrape the profile
+    # Scrape the profile (legacy mode)
     result = scrape_profile(
         args.linkedin_url,
         email=args.email,

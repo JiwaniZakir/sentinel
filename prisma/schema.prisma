@@ -74,6 +74,14 @@ enum FirmType {
   OTHER
 }
 
+enum AccountStatus {
+  ACTIVE
+  COOLDOWN
+  VERIFICATION_REQUIRED
+  BANNED
+  DISABLED
+}
+
 // Partner profiles populated from AI onboarding
 model Partner {
   id                    String        @id @default(uuid())
@@ -426,5 +434,37 @@ model ActivityLog {
 
   @@index([createdAt])
   @@map("activity_log")
+}
+
+// LinkedIn account pool for session management and rotation
+model LinkedInAccount {
+  id              String        @id @default(uuid())
+  email           String        @unique
+  linkedinEmail   String        @map("linkedin_email")
+  
+  // Encrypted credentials (use SESSION_ENCRYPTION_KEY env var for encryption)
+  encryptedPassword String      @map("encrypted_password")
+  gmailAppPassword  String      @map("gmail_app_password")
+  
+  // Session data
+  sessionCookies  String?       @map("session_cookies")  // Encrypted JSON
+  sessionExpiry   DateTime?     @map("session_expiry")
+  lastUsedAt      DateTime?     @map("last_used_at")
+  
+  // Health tracking
+  status          AccountStatus @default(ACTIVE)
+  failureCount    Int           @default(0) @map("failure_count")
+  cooldownUntil   DateTime?     @map("cooldown_until")
+  lastErrorMsg    String?       @map("last_error_msg")
+  
+  // Usage stats
+  scrapesToday    Int           @default(0) @map("scrapes_today")
+  scrapesDayReset DateTime?     @map("scrapes_day_reset")
+  totalScrapes    Int           @default(0) @map("total_scrapes")
+  
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  
+  @@map("linkedin_accounts")
 }
 

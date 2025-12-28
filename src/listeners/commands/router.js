@@ -10,6 +10,8 @@ const linkedinService = require('../../services/research/linkedin');
 const tavilyService = require('../../services/research/tavily');
 const perplexityService = require('../../services/research/perplexity');
 const wikipediaService = require('../../services/research/wikipedia');
+const accountPool = require('../../services/research/accountPool');
+const sessionManager = require('../../services/research/sessionManager');
 
 /**
  * Central command router for /partnerbot
@@ -48,6 +50,20 @@ function registerCommandRouter(app) {
     } else if (argsLower.startsWith('test-full-pipeline')) {
       const linkedinUrl = args.replace(/^test-full-pipeline\s*/i, '').trim() || 'https://www.linkedin.com/in/harris-stolzenberg-44468b78/';
       await testFullPipeline(respond, client, userId, userIsAdmin, linkedinUrl);
+    } else if (argsLower === 'linkedin-accounts') {
+      await listLinkedInAccounts(respond, userId, userIsAdmin);
+    } else if (argsLower === 'linkedin-add-account') {
+      await addLinkedInAccount(respond, userId, userIsAdmin);
+    } else if (argsLower.startsWith('linkedin-disable-account')) {
+      const email = args.replace(/^linkedin-disable-account\s*/i, '').trim();
+      await disableLinkedInAccount(respond, email, userId, userIsAdmin);
+    } else if (argsLower.startsWith('linkedin-reset-account')) {
+      const email = args.replace(/^linkedin-reset-account\s*/i, '').trim();
+      await resetLinkedInAccount(respond, email, userId, userIsAdmin);
+    } else if (argsLower === 'linkedin-pool-stats') {
+      await showLinkedInPoolStats(respond, userId, userIsAdmin);
+    } else if (argsLower === 'linkedin-generate-key') {
+      await generateEncryptionKey(respond, userId, userIsAdmin);
     } else if (argsLower === 'announce-event') {
       await announceEvent(respond, client, command, userIsAdmin);
     } else if (argsLower.startsWith('add-highlight')) {
@@ -89,6 +105,14 @@ async function showHelp(respond, userIsAdmin) {
 • \`/partnerbot test-perplexity [name, firm]\` — Test Perplexity research (person + firm)
 • \`/partnerbot test-wikipedia [name, firm]\` — Test Wikipedia search (FREE & unlimited!)
 • \`/partnerbot test-full-pipeline [linkedin_url]\` — Test FULL 5-stage pipeline (comprehensive!)
+
+*LinkedIn Account Pool Commands:*
+• \`/partnerbot linkedin-accounts\` — List all LinkedIn accounts and their status
+• \`/partnerbot linkedin-pool-stats\` — Show pool statistics and health
+• \`/partnerbot linkedin-add-account\` — Instructions to add a new account
+• \`/partnerbot linkedin-disable-account <email>\` — Disable an account
+• \`/partnerbot linkedin-reset-account <email>\` — Reset account failures/cooldown
+• \`/partnerbot linkedin-generate-key\` — Generate encryption key for SESSION_ENCRYPTION_KEY
   `;
 
   const blocks = [
@@ -1460,6 +1484,336 @@ async function handleDigest(respond, client, command, userId, userIsAdmin) {
 
   await respond({
     text: `📊 Digest generation coming soon! Use \`/partnerbot add-highlight <text>\` to add content.`,
+    response_type: 'ephemeral',
+  });
+}
+
+/**
+ * List all LinkedIn accounts
+ */
+async function listLinkedInAccounts(respond, userId, userIsAdmin) {
+  if (!userIsAdmin) {
+    await respond({
+      text: '⚠️ This command is only available to admins.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  try {
+    const accounts = await accountPool.getAllAccounts();
+    
+    if (accounts.length === 0) {
+      await respond({
+        text: '📭 No LinkedIn accounts in pool. Use `/partnerbot linkedin-add-account` to get started.',
+        response_type: 'ephemeral',
+      });
+      return;
+    }
+
+    let message = `🔐 *LinkedIn Account Pool* (${accounts.length} accounts)\n\n`;
+
+    for (const account of accounts) {
+      const statusEmoji = {
+        ACTIVE: '✅',
+        COOLDOWN: '🕐',
+        VERIFICATION_REQUIRED: '🔒',
+        BANNED: '❌',
+        DISABLED: '⏸️',
+      }[account.status] || '❓';
+
+      message += `${statusEmoji} *${account.linkedinEmail}*\n`;
+      message += `   Status: ${account.status}\n`;
+      message += `   Today: ${account.scrapesToday}/${accountPool.DAILY_LIMIT_PER_ACCOUNT} scrapes\n`;
+      message += `   Total: ${account.totalScrapes} scrapes\n`;
+      message += `   Failures: ${account.failureCount}\n`;
+      
+      if (account.lastUsedAt) {
+        message += `   Last used: ${new Date(account.lastUsedAt).toLocaleString()}\n`;
+      }
+      
+      if (account.cooldownUntil && new Date(account.cooldownUntil) > new Date()) {
+        message += `   Cooldown until: ${new Date(account.cooldownUntil).toLocaleString()}\n`;
+      }
+      
+      if (account.sessionExpiry) {
+        const expiry = new Date(account.sessionExpiry);
+        const hasValidSession = expiry > new Date();
+        message += `   Session: ${hasValidSession ? '✓ Valid' : '✗ Expired'} (${expiry.toLocaleDateString()})\n`;
+      }
+      
+      if (account.lastErrorMsg) {
+        message += `   Last error: ${account.lastErrorMsg.substring(0, 100)}...\n`;
+      }
+      
+      message += `\n`;
+    }
+
+    message += `\nUse \`/partnerbot linkedin-pool-stats\` for overview statistics.`;
+
+    await respond({
+      text: message,
+      response_type: 'ephemeral',
+    });
+
+  } catch (error) {
+    logger.error({ error: error.message }, 'Failed to list LinkedIn accounts');
+    await respond({
+      text: `❌ Failed to list accounts: ${error.message}`,
+      response_type: 'ephemeral',
+    });
+  }
+}
+
+/**
+ * Show LinkedIn pool statistics
+ */
+async function showLinkedInPoolStats(respond, userId, userIsAdmin) {
+  if (!userIsAdmin) {
+    await respond({
+      text: '⚠️ This command is only available to admins.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  try {
+    const stats = await accountPool.getPoolStats();
+
+    const message = `📊 *LinkedIn Account Pool Statistics*
+
+*Pool Health:*
+• Total accounts: ${stats.total}
+• Active: ${stats.active} ✅
+• In cooldown: ${stats.cooldown} 🕐
+• Need verification: ${stats.verificationRequired} 🔒
+• Banned: ${stats.banned} ❌
+• Available now: ${stats.availableNow} 🟢
+
+*Usage:*
+• Scrapes today: ${stats.scrapesToday}
+• Scrapes all time: ${stats.scrapesAllTime}
+
+*Limits:*
+• Per account/day: ${stats.dailyLimitPerAccount}
+• Cooldown duration: ${stats.cooldownHours} hours
+• Max capacity today: ${stats.total * stats.dailyLimitPerAccount}
+
+${stats.availableNow === 0 ? '⚠️ *WARNING: No accounts available!*' : ''}
+${stats.total === 0 ? '💡 Use `/partnerbot linkedin-add-account` to add accounts.' : ''}
+`;
+
+    await respond({
+      text: message,
+      response_type: 'ephemeral',
+    });
+
+  } catch (error) {
+    logger.error({ error: error.message }, 'Failed to get pool stats');
+    await respond({
+      text: `❌ Failed to get stats: ${error.message}`,
+      response_type: 'ephemeral',
+    });
+  }
+}
+
+/**
+ * Instructions to add a LinkedIn account
+ */
+async function addLinkedInAccount(respond, userId, userIsAdmin) {
+  if (!userIsAdmin) {
+    await respond({
+      text: '⚠️ This command is only available to admins.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  const message = `📝 *How to Add a LinkedIn Account to the Pool*
+
+*Prerequisites:*
+1. A burner LinkedIn account (not your main account)
+2. A Gmail account with 2FA enabled
+3. Gmail App Password generated
+
+*Step 1: Create Gmail App Password*
+• Go to https://myaccount.google.com/apppasswords
+• Sign in to the Gmail account
+• Create a new app password (name it "LinkedIn Bot")
+• Save the 16-character password
+
+*Step 2: Add to Railway (Recommended)*
+Go to your Railway project and add a JSON variable:
+
+\`\`\`
+LINKEDIN_ACCOUNTS='[
+  {
+    "linkedinEmail": "burner1@example.com",
+    "linkedinPassword": "linkedin_password_here",
+    "gmailEmail": "burner1gmail@gmail.com",
+    "gmailAppPassword": "abcd efgh ijkl mnop"
+  }
+]'
+\`\`\`
+
+*Step 3: Add to Database Manually*
+You can also use Prisma Studio or SQL:
+
+\`\`\`bash
+npm run db:studio
+\`\`\`
+
+Then create a \`LinkedInAccount\` record with:
+• \`linkedinEmail\`: LinkedIn login email
+• \`encryptedPassword\`: Use the encryption tool
+• \`gmailEmail\`: Gmail address
+• \`gmailAppPassword\`: 16-char app password
+
+*Important Notes:*
+⚠️ Never use your personal LinkedIn account
+⚠️ Use burner/throwaway accounts only
+⚠️ LinkedIn may ban accounts that scrape heavily
+⚠️ Have backup accounts ready
+
+*Need encryption key?*
+Use \`/partnerbot linkedin-generate-key\` to generate \`SESSION_ENCRYPTION_KEY\`
+`;
+
+  await respond({
+    text: message,
+    response_type: 'ephemeral',
+  });
+}
+
+/**
+ * Disable a LinkedIn account
+ */
+async function disableLinkedInAccount(respond, email, userId, userIsAdmin) {
+  if (!userIsAdmin) {
+    await respond({
+      text: '⚠️ This command is only available to admins.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  if (!email) {
+    await respond({
+      text: 'Usage: `/partnerbot linkedin-disable-account <email>`',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  try {
+    const accounts = await accountPool.getAllAccounts();
+    const account = accounts.find(a => a.email === email || a.linkedinEmail === email);
+
+    if (!account) {
+      await respond({
+        text: `❌ Account not found: ${email}`,
+        response_type: 'ephemeral',
+      });
+      return;
+    }
+
+    await accountPool.updateAccountStatus(account.id, 'DISABLED');
+
+    await respond({
+      text: `✅ Disabled account: ${account.linkedinEmail}`,
+      response_type: 'ephemeral',
+    });
+
+  } catch (error) {
+    logger.error({ error: error.message }, 'Failed to disable account');
+    await respond({
+      text: `❌ Failed to disable account: ${error.message}`,
+      response_type: 'ephemeral',
+    });
+  }
+}
+
+/**
+ * Reset a LinkedIn account
+ */
+async function resetLinkedInAccount(respond, email, userId, userIsAdmin) {
+  if (!userIsAdmin) {
+    await respond({
+      text: '⚠️ This command is only available to admins.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  if (!email) {
+    await respond({
+      text: 'Usage: `/partnerbot linkedin-reset-account <email>`',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  try {
+    const accounts = await accountPool.getAllAccounts();
+    const account = accounts.find(a => a.email === email || a.linkedinEmail === email);
+
+    if (!account) {
+      await respond({
+        text: `❌ Account not found: ${email}`,
+        response_type: 'ephemeral',
+      });
+      return;
+    }
+
+    await accountPool.resetAccount(account.id);
+
+    await respond({
+      text: `✅ Reset account: ${account.linkedinEmail}\n• Failure count: 0\n• Cooldown: cleared\n• Status: ACTIVE`,
+      response_type: 'ephemeral',
+    });
+
+  } catch (error) {
+    logger.error({ error: error.message }, 'Failed to reset account');
+    await respond({
+      text: `❌ Failed to reset account: ${error.message}`,
+      response_type: 'ephemeral',
+    });
+  }
+}
+
+/**
+ * Generate encryption key
+ */
+async function generateEncryptionKey(respond, userId, userIsAdmin) {
+  if (!userIsAdmin) {
+    await respond({
+      text: '⚠️ This command is only available to admins.',
+      response_type: 'ephemeral',
+    });
+    return;
+  }
+
+  const key = sessionManager.generateEncryptionKey();
+
+  const message = `🔑 *Generated Encryption Key*
+
+Add this to your Railway environment variables:
+
+\`\`\`
+SESSION_ENCRYPTION_KEY=${key}
+\`\`\`
+
+⚠️ *IMPORTANT:*
+• Save this key securely
+• Once set, never change it (existing data will be unreadable)
+• This key encrypts all LinkedIn passwords and session cookies
+• Keep it secret - never commit to Git
+
+After adding to Railway, redeploy the bot.
+`;
+
+  await respond({
+    text: message,
     response_type: 'ephemeral',
   });
 }
