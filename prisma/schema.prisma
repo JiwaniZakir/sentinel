@@ -93,11 +93,24 @@ model Partner {
   role                  String?
   partnerType           PartnerType   @map("partner_type")
   
+  // Contact & Social
+  phoneNumber           String?       @map("phone_number")
+  twitterHandle         String?       @map("twitter_handle")
+  personalWebsite       String?       @map("personal_website")
+  location              String?
+  timezone              String?
+  
   // Investment/Partnership details
   sectors               String[]      @default([])
   stageFocus            String[]      @default([]) @map("stage_focus")
   checkSize             String?       @map("check_size")
   geographicFocus       String[]      @default([]) @map("geographic_focus")
+  
+  // Portfolio & Track Record
+  portfolioCompanies    String[]      @default([]) @map("portfolio_companies")
+  notableExits          Json?         @map("notable_exits")        // [{company, exitType, value, date}]
+  totalInvestments      Int?          @default(0) @map("total_investments")
+  activeInvestments     Int?          @default(0) @map("active_investments")
   
   // Profile details
   idealFounderProfile   String?       @map("ideal_founder_profile")
@@ -106,23 +119,51 @@ model Partner {
   goalsFromCommunity    String?       @map("goals_from_community")
   linkedinUrl           String?       @map("linkedin_url")
   
+  // Personal insights (from onboarding)
+  originStory           String?       @map("origin_story")
+  superpower            String?
+  proudMoment           String?       @map("proud_moment")
+  wishlist              String?
+  hobbies               String[]      @default([])
+  
+  // Engagement tracking
+  lastActiveAt          DateTime?     @map("last_active_at")
+  messageCount          Int           @default(0) @map("message_count")
+  eventAttendance       Int           @default(0) @map("event_attendance")
+  connectionsInNetwork  Int           @default(0) @map("connections_in_network")
+  
   // Onboarding
   onboardingComplete    Boolean       @default(false) @map("onboarding_complete")
   onboardingData        Json?         @map("onboarding_data")
+  onboardingVersion     String?       @default("1.0") @map("onboarding_version")
   
   // Research data (denormalized for quick access)
   researchSummary       Json?         @map("research_summary")
   researchStatus        ResearchStatus? @map("research_status")
   researchCompletedAt   DateTime?     @map("research_completed_at")
+  lastResearchAt        DateTime?     @map("last_research_at")
+  
+  // Communication preferences
+  preferredContactMethod String?      @default("slack") @map("preferred_contact_method")
+  notificationSettings  Json?         @map("notification_settings")
+  
+  // Tags & Segmentation
+  tags                  String[]      @default([])
+  customFields          Json?         @map("custom_fields")
   
   // Relationships
   conversations         OnboardingConversation[]
   outreachMessages      OutreachMessage[]
   research              PartnerResearch[]
+  interactions          PartnerInteraction[]
   
   createdAt             DateTime      @default(now()) @map("created_at")
   updatedAt             DateTime      @updatedAt @map("updated_at")
 
+  @@index([firm])
+  @@index([partnerType])
+  @@index([onboardingComplete])
+  @@index([lastActiveAt])
   @@map("partners")
 }
 
@@ -134,26 +175,45 @@ model PartnerResearch {
   
   // Research classification
   researchType    ResearchType   @map("research_type")
-  source          String         // API used: linkedin_scraper, perplexity, tavily
+  source          String         // API used: linkedin_scraper, perplexity, tavily, twitter, wikipedia
   query           String?        // Search query used
+  searchTerms     String[]       @default([]) @map("search_terms")
   
   // Raw and structured data
   rawData         Json           @map("raw_data")
   structuredData  Json?          @map("structured_data")
+  extractedFacts  Json?          @map("extracted_facts")    // [{fact, confidence, source}]
+  keyInsights     Json?          @map("key_insights")       // [{insight, relevance}]
   
   // Quality and freshness tracking
   confidence      Float?         // 0-1 confidence score
+  relevanceScore  Float?         @map("relevance_score")    // How relevant to partner (0-1)
+  trustScore      Float?         @map("trust_score")        // How trustworthy is source (0-1)
   status          ResearchStatus @default(PENDING)
   errorMessage    String?        @map("error_message")
+  errorType       String?        @map("error_type")         // 'RATE_LIMIT', 'AUTH_FAILED', etc.
   
+  // API metadata
+  apiCost         Float?         @map("api_cost")           // Cost in USD
+  apiLatency      Int?           @map("api_latency")        // Response time in ms
+  tokensUsed      Int?           @map("tokens_used")
+  
+  // Caching & freshness
   scrapedAt       DateTime?      @map("scraped_at")
   expiresAt       DateTime?      @map("expires_at")
+  cacheHit        Boolean        @default(false) @map("cache_hit")
+  
+  // Version tracking
+  researchVersion String?        @default("1.0") @map("research_version")
   
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
 
   @@index([partnerId])
   @@index([researchType])
+  @@index([source])
+  @@index([status])
+  @@index([scrapedAt])
   @@map("partner_research")
 }
 
@@ -166,47 +226,76 @@ model PersonProfile {
   name              String
   linkedinUrl       String?   @map("linkedin_url")
   twitterUrl        String?   @map("twitter_url")
+  githubUrl         String?   @map("github_url")
+  substackUrl       String?   @map("substack_url")
+  personalWebsite   String?   @map("personal_website")
   email             String?
   location          String?
   photoUrl          String?   @map("photo_url")
   headline          String?
   
   // Career (JSON arrays)
-  careerTimeline    Json?     @map("career_timeline")    // [{company, role, startDate, endDate, highlights}]
-  education         Json?                                 // [{school, degree, field, year}]
+  careerTimeline    Json?     @map("career_timeline")    // [{company, role, startDate, endDate, highlights, description}]
+  education         Json?                                 // [{school, degree, field, year, gpa, honors}]
+  skills            Json?                                 // [{skill, endorsements, yearsExperience}]
+  certifications    Json?                                 // [{name, issuer, date, expiryDate}]
   
   // Investment/Professional Focus
   investmentThesis  String?   @map("investment_thesis")
   sectors           String[]  @default([])
   stageFocus        String[]  @default([]) @map("stage_focus")
   checkSizeRange    String?   @map("check_size_range")
+  geographyFocus    String[]  @default([]) @map("geography_focus")
+  investmentCount   Int?      @default(0) @map("investment_count")
   
   // Achievements & Recognition (JSON arrays)
-  notableDeals      Json?     @map("notable_deals")      // [{company, round, amount, date, outcome}]
-  awards            Json?                                 // [{name, year, organization}]
-  pressFeatures     Json?     @map("press_features")     // [{publication, title, url, date}]
-  speakingEvents    Json?     @map("speaking_events")    // [{event, topic, date}]
+  notableDeals      Json?     @map("notable_deals")      // [{company, round, amount, date, outcome, status, roi}]
+  awards            Json?                                 // [{name, year, organization, category}]
+  pressFeatures     Json?     @map("press_features")     // [{publication, title, url, date, summary}]
+  speakingEvents    Json?     @map("speaking_events")    // [{event, topic, date, location, videoUrl}]
+  boardSeats        Json?     @map("board_seats")        // [{company, role, since, status}]
+  advisoryRoles     Json?     @map("advisory_roles")     // [{company, role, since}]
   
   // Content & Thought Leadership (JSON arrays)
-  publications      Json?                                 // [{title, url, type, date}]
-  podcasts          Json?                                 // [{show, episode, url, date}]
-  socialContent     Json?     @map("social_content")     // Recent interesting tweets/posts
+  publications      Json?                                 // [{title, url, type, date, publication, citations}]
+  podcasts          Json?                                 // [{show, episode, url, date, transcript, summary}]
+  socialContent     Json?     @map("social_content")     // Recent interesting tweets/posts with engagement
+  videos            Json?                                 // [{title, url, platform, date, views}]
+  blogPosts         Json?     @map("blog_posts")         // [{title, url, date, summary, views}]
+  
+  // Social Media Analytics
+  twitterFollowers  Int?      @map("twitter_followers")
+  twitterEngagement Float?    @map("twitter_engagement") // Average engagement rate
+  linkedinConnections Int?    @map("linkedin_connections")
+  githubStars       Int?      @map("github_stars")
+  substackSubscribers Int?    @map("substack_subscribers")
+  
+  // Network & Influence
+  networkScore      Float?    @default(0) @map("network_score")      // 0-1 score based on connections
+  influenceScore    Float?    @default(0) @map("influence_score")    // 0-1 score based on content reach
+  credibilityScore  Float?    @default(0) @map("credibility_score")  // 0-1 score based on verified facts
   
   // Personal (for engaging intros)
   funFacts          String[]  @default([]) @map("fun_facts")
   interests         String[]  @default([])
   quotableQuotes    String[]  @default([]) @map("quotable_quotes")
+  languages         String[]  @default([])
+  volunteerWork     Json?     @map("volunteer_work")     // [{organization, role, cause}]
   
   // AI-Generated Summaries
   shortBio          String?   @map("short_bio")          // 2-3 sentence summary
+  longBio           String?   @map("long_bio")           // Comprehensive biography
   introSummary      String?   @map("intro_summary")      // Rich intro for Slack
   connectionAngles  Json?     @map("connection_angles")  // Ways to connect with community
+  keyTalkingPoints  Json?     @map("key_talking_points") // Topics they're passionate about
   
   // Quality & Metadata
   dataQualityScore  Float     @default(0) @map("data_quality_score")
   factCheckScore    Float     @default(0) @map("fact_check_score")
+  completenessScore Float     @default(0) @map("completeness_score")  // How complete is the profile (0-1)
   sourcesUsed       String[]  @default([]) @map("sources_used")
   lastResearchAt    DateTime? @map("last_research_at")
+  researchVersion   String?   @default("1.0") @map("research_version")
   
   // Relationship to firm
   firmProfileId     String?   @map("firm_profile_id")
@@ -215,6 +304,9 @@ model PersonProfile {
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
+  @@index([name])
+  @@index([firmProfileId])
+  @@index([dataQualityScore])
   @@map("person_profiles")
 }
 
@@ -227,36 +319,74 @@ model FirmProfile {
   type              FirmType
   foundedYear       Int?      @map("founded_year")
   headquarters      String?
+  officeLocations   String[]  @default([]) @map("office_locations")
   website           String?
   linkedinUrl       String?   @map("linkedin_url")
+  twitterUrl        String?   @map("twitter_url")
+  crunchbaseUrl     String?   @map("crunchbase_url")
   description       String?
+  tagline           String?
   
   // Investment Profile (for VC/Investment firms)
   aum               String?   // Assets under management
   fundCount         Int?      @map("fund_count")
+  currentFundSize   String?   @map("current_fund_size")
+  totalCapitalRaised String?  @map("total_capital_raised")
   portfolioSize     Int?      @map("portfolio_size")
+  activePortfolioSize Int?    @map("active_portfolio_size")
   investmentThesis  String?   @map("investment_thesis")
   sectorFocus       String[]  @default([]) @map("sector_focus")
   stageFocus        String[]  @default([]) @map("stage_focus")
   geographyFocus    String[]  @default([]) @map("geography_focus")
+  checkSizeMin      String?   @map("check_size_min")
+  checkSizeMax      String?   @map("check_size_max")
+  typicalOwnership  String?   @map("typical_ownership")  // "5-15%"
   
   // Portfolio & Track Record (JSON arrays)
-  notablePortfolio  Json?     @map("notable_portfolio")  // [{company, round, outcome}]
-  exits             Json?                                 // [{company, type, value, date}]
+  notablePortfolio  Json?     @map("notable_portfolio")  // [{company, round, amount, date, outcome, sector, status}]
+  exits             Json?                                 // [{company, type, value, date, multiple, status}]
+  unicorns          Json?                                 // [{company, valuation, sector, year}]
+  ipos              Json?                                 // [{company, ticker, date, value}]
+  
+  // Performance Metrics
+  totalInvestments  Int?      @default(0) @map("total_investments")
+  successfulExits   Int?      @default(0) @map("successful_exits")
+  averageIRR        Float?    @map("average_irr")
+  topQuartileReturns Boolean? @default(false) @map("top_quartile_returns")
   
   // Team (JSON array)
-  teamMembers       Json?     @map("team_members")       // [{name, role, linkedinUrl, partnerId}]
+  teamMembers       Json?     @map("team_members")       // [{name, role, linkedinUrl, partnerId, joinDate}]
   partnerCount      Int?      @map("partner_count")
+  employeeCount     Int?      @map("employee_count")
+  foundingPartners  String[]  @default([]) @map("founding_partners")
+  
+  // LPs & Investors (for fund context)
+  limitedPartners   Json?     @map("limited_partners")   // [{name, type, isPublic}]
+  strategicPartners Json?     @map("strategic_partners") // [{company, relationship}]
   
   // News & Reputation (JSON arrays)
-  recentNews        Json?     @map("recent_news")        // [{title, url, date, summary}]
-  fundingNews       Json?     @map("funding_news")       // Fund raises, etc.
-  rankings          Json?                                 // [{source, rank, category, year}]
+  recentNews        Json?     @map("recent_news")        // [{title, url, date, summary, sentiment}]
+  fundingNews       Json?     @map("funding_news")       // Fund raises, closings
+  rankings          Json?                                 // [{source, rank, category, year, listName}]
+  awards            Json?                                 // [{award, year, category}]
+  
+  // Social & Community
+  twitterFollowers  Int?      @map("twitter_followers")
+  linkedinFollowers Int?      @map("linkedin_followers")
+  communityEvents   Json?     @map("community_events")   // [{name, type, frequency}]
+  
+  // Investment Preferences & Patterns
+  preferredSectors  String[]  @default([]) @map("preferred_sectors")
+  avoidedSectors    String[]  @default([]) @map("avoided_sectors")
+  investmentSpeed   String?   @map("investment_speed")    // "fast" | "thorough" | "relationship-driven"
+  decisionMakers    Json?     @map("decision_makers")     // [{name, role, veto_power}]
   
   // Quality & Metadata
   dataQualityScore  Float     @default(0) @map("data_quality_score")
+  completenessScore Float     @default(0) @map("completeness_score")
   sourcesUsed       String[]  @default([]) @map("sources_used")
   lastResearchAt    DateTime? @map("last_research_at")
+  researchVersion   String?   @default("1.0") @map("research_version")
   
   // Relationships
   personProfiles    PersonProfile[]
@@ -264,6 +394,8 @@ model FirmProfile {
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
+  @@index([type])
+  @@index([dataQualityScore])
   @@map("firm_profiles")
 }
 
@@ -276,28 +408,64 @@ model CitationCrawl {
   // Content
   title               String?
   author              String?
+  authorCredentials   String?   @map("author_credentials")  // PhD, CEO, etc.
   publishedDate       DateTime? @map("published_date")
+  lastUpdated         DateTime? @map("last_updated")
   fullText            String?   @map("full_text")
   summary             String?
+  excerpt             String?   // First paragraph or key excerpt
+  wordCount           Int?      @map("word_count")
+  
+  // Content classification
+  contentCategory     String?   @map("content_category")  // 'news', 'blog', 'academic', 'press_release', etc.
+  sentiment           String?   // 'positive', 'neutral', 'negative'
+  language            String?   @default("en")
   
   // Extracted Facts (JSON array)
-  extractedFacts      Json?     @map("extracted_facts")  // [{type, value, confidence, context}]
+  extractedFacts      Json?     @map("extracted_facts")  // [{type, value, confidence, context, lineNumber}]
   mentionedPeople     String[]  @default([]) @map("mentioned_people")
   mentionedCompanies  String[]  @default([]) @map("mentioned_companies")
+  mentionedLocations  String[]  @default([]) @map("mentioned_locations")
+  keyTopics           String[]  @default([]) @map("key_topics")
   
-  // Quality
+  // SEO & Metadata
+  metaDescription     String?   @map("meta_description")
+  metaKeywords        String[]  @default([]) @map("meta_keywords")
+  ogImage             String?   @map("og_image")
+  canonicalUrl        String?   @map("canonical_url")
+  
+  // Quality & Trust
   trustScore          Float     @default(0.5) @map("trust_score")
   relevanceScore      Float?    @map("relevance_score")
+  credibilityScore    Float?    @map("credibility_score")  // Based on domain, author, citations
+  biasScore           Float?    @map("bias_score")         // Detected bias (0=neutral, 1=highly biased)
   
-  // Metadata
+  // Source verification
+  hasAuthor           Boolean   @default(false) @map("has_author")
+  hasCitations        Boolean   @default(false) @map("has_citations")
+  isPaywalled         Boolean   @default(false) @map("is_paywalled")
+  requiresLogin       Boolean   @default(false) @map("requires_login")
+  
+  // Technical metadata
   httpStatus          Int?      @map("http_status")
   contentType         String?   @map("content_type")
+  contentLength       Int?      @map("content_length")
+  crawlDuration       Int?      @map("crawl_duration")    // milliseconds
   crawledAt           DateTime  @default(now()) @map("crawled_at")
   
   // Link back to research
   researchId          String?   @map("research_id")
+  citedByResearchIds  String[]  @default([]) @map("cited_by_research_ids")
+  
+  // Usage tracking
+  timesReferenced     Int       @default(0) @map("times_referenced")
+  usedInProfiles      String[]  @default([]) @map("used_in_profiles")  // PersonProfile IDs
   
   @@index([domain])
+  @@index([contentCategory])
+  @@index([trustScore])
+  @@index([publishedDate])
+  @@index([crawledAt])
   @@map("citation_crawls")
 }
 
@@ -306,26 +474,52 @@ model VerifiedFact {
   id                  String          @id @default(uuid())
   
   // The fact itself
-  factType            String          @map("fact_type")   // 'investment', 'position', 'achievement', etc.
+  factType            String          @map("fact_type")   // 'investment', 'position', 'achievement', 'education', 'award', etc.
+  category            String?                              // 'career', 'investment', 'personal', 'achievement'
   subject             String                               // Person or company name
   value               String                               // The actual fact
+  normalizedValue     String?         @map("normalized_value")  // Standardized format for matching
   context             String?                              // Additional context
+  
+  // Temporal tracking
+  factDate            DateTime?       @map("fact_date")    // When did this fact occur
+  isCurrentFact       Boolean         @default(true) @map("is_current_fact")
   
   // Verification
   status              FactCheckStatus @default(UNVERIFIED)
   confidence          Float           @default(0)
-  corroboratingSources Json?          @map("corroborating_sources") // [{source, url, snippet}]
-  contradictions      Json?                                          // [{source, url, conflictingValue}]
+  verifiedCount       Int             @default(0) @map("verified_count")  // Number of corroborating sources
+  contradictionCount  Int             @default(0) @map("contradiction_count")
+  corroboratingSources Json?          @map("corroborating_sources") // [{source, url, snippet, extractedAt}]
+  contradictions      Json?                                          // [{source, url, conflictingValue, reason}]
+  
+  // Source attribution
+  primarySource       String?         @map("primary_source")
+  primarySourceUrl    String?         @map("primary_source_url")
+  discoveredVia       String?         @map("discovered_via")  // Which research stage found this
+  
+  // Relevance
+  importanceScore     Float?          @default(0) @map("importance_score")  // How important is this fact (0-1)
+  uniquenessScore     Float?          @default(0) @map("uniqueness_score")  // How unique/interesting (0-1)
   
   // Relationships
   personProfileId     String?         @map("person_profile_id")
   firmProfileId       String?         @map("firm_profile_id")
   
+  // AI Analysis
+  aiSummary           String?         @map("ai_summary")    // AI-generated summary of this fact
+  usedInIntro         Boolean         @default(false) @map("used_in_intro")  // Was this used in the introduction
+  
   createdAt           DateTime        @default(now()) @map("created_at")
   updatedAt           DateTime        @updatedAt @map("updated_at")
 
   @@index([factType])
+  @@index([category])
   @@index([subject])
+  @@index([status])
+  @@index([confidence])
+  @@index([personProfileId])
+  @@index([firmProfileId])
   @@map("verified_facts")
 }
 
@@ -335,14 +529,72 @@ model OnboardingConversation {
   partnerId     String?           @map("partner_id")
   partner       Partner?          @relation(fields: [partnerId], references: [id])
   slackUserId   String            @map("slack_user_id")
-  messages      Json              @default("[]") // Array of {role, content, timestamp}
+  messages      Json              @default("[]") // Array of {role, content, timestamp, tokens}
   extractedData Json?             @map("extracted_data") // Partial data as conversation progresses
   status        OnboardingStatus  @default(PENDING)
   
+  // Conversation analytics
+  messageCount      Int           @default(0) @map("message_count")
+  userMessageCount  Int           @default(0) @map("user_message_count")
+  botMessageCount   Int           @default(0) @map("bot_message_count")
+  totalTokens       Int?          @map("total_tokens")
+  avgResponseTime   Float?        @map("avg_response_time")  // seconds
+  
+  // Completion tracking
+  completionScore   Float?        @map("completion_score")    // How complete is data (0-1)
+  dataQuality       Float?        @map("data_quality")        // Quality of extracted data (0-1)
+  linkedinProvided  Boolean       @default(false) @map("linkedin_provided")
+  researchTriggered Boolean       @default(false) @map("research_triggered")
+  
+  // User experience
+  userSentiment     String?       // 'positive', 'neutral', 'frustrated'
+  droppedOff        Boolean       @default(false) @map("dropped_off")
+  droppedAtStep     String?       @map("dropped_at_step")
+  
   startedAt     DateTime          @default(now()) @map("started_at")
   completedAt   DateTime?         @map("completed_at")
+  lastActivityAt DateTime?        @map("last_activity_at")
 
+  @@index([slackUserId])
+  @@index([status])
+  @@index([partnerId])
   @@map("onboarding_conversations")
+}
+
+// Network connections between partners
+model PartnerConnection {
+  id                String    @id @default(uuid())
+  partner1Id        String    @map("partner1_id")
+  partner2Id        String    @map("partner2_id")
+  
+  // Connection details
+  connectionType    String    @map("connection_type")  // 'co_investment', 'same_firm', 'mutual_interest', 'introduced'
+  strength          Float     @default(0)              // 0-1 connection strength
+  
+  // Context
+  sharedInterests   String[]  @default([]) @map("shared_interests")
+  sharedSectors     String[]  @default([]) @map("shared_sectors")
+  sharedPortfolio   String[]  @default([]) @map("shared_portfolio")  // Company names
+  
+  // Interaction history
+  interactions      Int       @default(0)
+  lastInteraction   DateTime? @map("last_interaction")
+  introducedBy      String?   @map("introduced_by")      // Slack user ID
+  introducedAt      DateTime? @map("introduced_at")
+  
+  // AI recommendations
+  recommendedMatch  Boolean   @default(false) @map("recommended_match")
+  matchReason       String?   @map("match_reason")
+  synergyScore      Float?    @map("synergy_score")      // 0-1 how well they'd work together
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@unique([partner1Id, partner2Id])
+  @@index([connectionType])
+  @@index([strength])
+  @@index([recommendedMatch])
+  @@map("partner_connections")
 }
 
 // Events for outreach
@@ -421,6 +673,43 @@ model DigestItem {
   @@map("digest_items")
 }
 
+// Partner interactions and engagement tracking
+model PartnerInteraction {
+  id                String   @id @default(uuid())
+  partnerId         String   @map("partner_id")
+  partner           Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  
+  // Interaction details
+  interactionType   String   @map("interaction_type")  // 'message', 'event_rsvp', 'intro_posted', 'connection_made', etc.
+  channelId         String?  @map("channel_id")
+  channelName       String?  @map("channel_name")
+  messageTs         String?  @map("message_ts")
+  
+  // Content
+  content           String?  // Message text or interaction summary
+  sentiment         String?  // 'positive', 'neutral', 'negative'
+  topics            String[] @default([])  // Extracted topics from content
+  
+  // Engagement metrics
+  reactionsCount    Int?     @default(0) @map("reactions_count")
+  repliesCount      Int?     @default(0) @map("replies_count")
+  mentionsCount     Int?     @default(0) @map("mentions_count")
+  
+  // Context
+  relatedPartnerId  String?  @map("related_partner_id")  // If interacting with another partner
+  eventId           String?  @map("event_id")
+  
+  // Metadata
+  metadata          Json?
+  
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([partnerId])
+  @@index([interactionType])
+  @@index([createdAt])
+  @@map("partner_interactions")
+}
+
 // Activity log for audit trail
 model ActivityLog {
   id           String   @id @default(uuid())
@@ -433,7 +722,101 @@ model ActivityLog {
   createdAt    DateTime @default(now()) @map("created_at")
 
   @@index([createdAt])
+  @@index([actorSlackId])
   @@map("activity_log")
+}
+
+// Research pipeline execution tracking
+model ResearchSession {
+  id                  String        @id @default(uuid())
+  partnerId           String        @map("partner_id")
+  
+  // Session details
+  sessionType         String        @map("session_type")  // 'full_pipeline', 'quick_research', 'refresh'
+  triggerSource       String        @map("trigger_source") // 'onboarding', 'manual_test', 'scheduled_refresh'
+  linkedinUrl         String?       @map("linkedin_url")
+  searchContext       Json?         @map("search_context")  // {name, firm, role, etc.}
+  
+  // Execution details
+  status              ResearchStatus @default(PENDING)
+  stagesCompleted     String[]      @default([]) @map("stages_completed")
+  currentStage        String?       @map("current_stage")
+  
+  // Results
+  sourcesAttempted    String[]      @default([]) @map("sources_attempted")
+  sourcesSucceeded    String[]      @default([]) @map("sources_succeeded")
+  sourcesFailed       String[]      @default([]) @map("sources_failed")
+  
+  // Metrics
+  totalDuration       Int?          @map("total_duration")      // milliseconds
+  stage1Duration      Int?          @map("stage1_duration")
+  stage2Duration      Int?          @map("stage2_duration")
+  stage3Duration      Int?          @map("stage3_duration")
+  stage4Duration      Int?          @map("stage4_duration")
+  stage5Duration      Int?          @map("stage5_duration")
+  
+  // Quality results
+  factsCollected      Int?          @default(0) @map("facts_collected")
+  factsVerified       Int?          @default(0) @map("facts_verified")
+  citationsCrawled    Int?          @default(0) @map("citations_crawled")
+  qualityScore        Float?        @map("quality_score")
+  
+  // Cost tracking
+  totalCost           Float?        @default(0) @map("total_cost")  // USD
+  apiCalls            Int?          @default(0) @map("api_calls")
+  
+  // Errors
+  errors              Json?         // [{stage, error, timestamp}]
+  errorMessage        String?       @map("error_message")
+  
+  startedAt           DateTime      @default(now()) @map("started_at")
+  completedAt         DateTime?     @map("completed_at")
+
+  @@index([partnerId])
+  @@index([status])
+  @@index([sessionType])
+  @@index([startedAt])
+  @@map("research_sessions")
+}
+
+// AI-generated insights about partners
+model AIInsight {
+  id                String    @id @default(uuid())
+  partnerId         String    @map("partner_id")
+  
+  // Insight details
+  insightType       String    @map("insight_type")  // 'investment_pattern', 'connection_opportunity', 'risk_flag', etc.
+  category          String    // 'investment', 'network', 'reputation', 'compatibility'
+  title             String
+  description       String
+  
+  // Confidence & Relevance
+  confidence        Float     @default(0)
+  relevanceScore    Float     @default(0) @map("relevance_score")
+  actionable        Boolean   @default(false)
+  
+  // Supporting data
+  supportingFacts   Json?     @map("supporting_facts")   // [{factId, relevance}]
+  sources           Json?                                  // [{source, url, credibility}]
+  
+  // AI metadata
+  model             String    // 'gpt-4', 'claude-3', etc.
+  promptVersion     String?   @map("prompt_version")
+  tokensUsed        Int?      @map("tokens_used")
+  
+  // Usage tracking
+  viewed            Boolean   @default(false)
+  viewedAt          DateTime? @map("viewed_at")
+  actionTaken       String?   @map("action_taken")
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  expiresAt         DateTime? @map("expires_at")
+
+  @@index([partnerId])
+  @@index([insightType])
+  @@index([category])
+  @@index([actionable])
+  @@map("ai_insights")
 }
 
 // LinkedIn account pool for session management and rotation
