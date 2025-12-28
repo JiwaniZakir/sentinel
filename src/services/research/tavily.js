@@ -198,11 +198,23 @@ async function searchLinkedInProfile(name, firm, linkedinUrl = null) {
     // Extract username from URL for more specific search
     const usernameMatch = linkedinUrl.match(/linkedin\.com\/in\/([^\/\?]+)/i);
     const username = usernameMatch ? usernameMatch[1] : null;
-    query = username 
-      ? `site:linkedin.com/in "${username}" professional profile experience`
-      : `site:linkedin.com/in "${name}" "${firm}" professional profile`;
+    if (username) {
+      query = `site:linkedin.com/in "${username}" professional profile experience`;
+    } else if (name || firm) {
+      query = `site:linkedin.com/in ${name ? `"${name}"` : ''} ${firm ? `"${firm}"` : ''} professional profile`;
+    } else {
+      return {
+        success: false,
+        error: 'Need at least a LinkedIn URL with username, or name/firm to search',
+      };
+    }
+  } else if (name || firm) {
+    query = `site:linkedin.com/in ${name ? `"${name}"` : ''} ${firm ? `"${firm}"` : ''} professional profile experience education`;
   } else {
-    query = `site:linkedin.com/in "${name}" "${firm}" professional profile experience education`;
+    return {
+      success: false,
+      error: 'Need at least name or firm to search LinkedIn',
+    };
   }
   
   console.log('Query:', query);
@@ -267,8 +279,10 @@ function parseLinkedInResults(tavilyResult, targetName, targetFirm) {
     // Check if this is a LinkedIn profile URL
     if (url.includes('linkedin.com/in/')) {
       // Score based on name/firm match
-      const nameInTitle = title.includes(targetName.toLowerCase());
-      const firmInContent = content.includes(targetFirm.toLowerCase()) || title.includes(targetFirm.toLowerCase());
+      const nameInTitle = targetName ? title.includes(targetName.toLowerCase()) : false;
+      const firmInContent = targetFirm 
+        ? (content.includes(targetFirm.toLowerCase()) || title.includes(targetFirm.toLowerCase()))
+        : false;
       
       if (nameInTitle || firmInContent) {
         bestMatch = result;
