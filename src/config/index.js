@@ -22,6 +22,7 @@ const config = {
     linkedin: {
       email: process.env.LINKEDIN_EMAIL,
       password: process.env.LINKEDIN_PASSWORD,
+      scrapeTimeout: parseInt(process.env.LINKEDIN_SCRAPE_TIMEOUT) || 150000, // 150 seconds (2.5 min)
     },
     perplexity: {
       apiKey: process.env.PERPLEXITY_API_KEY,

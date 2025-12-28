@@ -498,7 +498,7 @@ def get_cookies_from_driver(driver):
         return []
 
 
-def wait_for_verification_code(gmail_email, gmail_app_password, timeout=60):
+def wait_for_verification_code(gmail_email, gmail_app_password, timeout=120):
     """
     Wait for a LinkedIn verification code via email (IMAP).
     This is a Python implementation matching the Node.js emailVerification service.
@@ -626,17 +626,20 @@ def scrape_with_session(linkedin_url, email, password, cookies=None, gmail_email
                         if code:
                             # Submit verification code
                             try:
+                                print(f"Entering verification code: {code}", file=sys.stderr)
                                 code_input = driver.find_element("id", "input__email_verification_pin")
+                                code_input.clear()
                                 code_input.send_keys(code)
-                                time.sleep(1)
+                                time.sleep(2)
                                 
                                 submit_btn = driver.find_element("css selector", "button[type='submit']")
                                 submit_btn.click()
-                                time.sleep(5)
+                                print("Verification code submitted, waiting for response...", file=sys.stderr)
+                                time.sleep(8)
                                 
                                 # Check if verification succeeded
                                 if "feed" in driver.current_url or "/in/" in driver.current_url:
-                                    print("Verification successful!", file=sys.stderr)
+                                    print("✅ Verification successful!", file=sys.stderr)
                                     login_success = True
                                 else:
                                     return {

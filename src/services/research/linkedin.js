@@ -16,8 +16,8 @@ const emailVerification = require('./emailVerification');
 // Path to the Python scraper script (named to avoid import conflict with linkedin_scraper package)
 const SCRAPER_SCRIPT = path.join(__dirname, '../../../scripts/scrape_linkedin.py');
 
-// Timeout for scraping (60 seconds)
-const SCRAPE_TIMEOUT = 60000;
+// Timeout for scraping (configurable, default 150 seconds to allow for email verification)
+const SCRAPE_TIMEOUT = config.research?.linkedin?.scrapeTimeout || 150000;
 
 // Python executable - prefer venv if available (for Railway/Nix deployment)
 const VENV_PYTHON = '/app/.venv/bin/python3';
