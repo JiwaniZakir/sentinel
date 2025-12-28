@@ -4,6 +4,7 @@ const { createApp, registerListeners, setupErrorHandler, setupHealthCheck } = re
 const { logger } = require('./utils/logger');
 const db = require('./services/database');
 const config = require('./config');
+const { loadAccountsFromEnv } = require('./services/research/accountPool');
 
 /**
  * Main entry point
@@ -18,6 +19,16 @@ async function main() {
       throw new Error('Database connection failed');
     }
     logger.info('Database connected');
+
+    // Load LinkedIn accounts from environment variables
+    try {
+      const result = await loadAccountsFromEnv();
+      if (result.loaded > 0) {
+        logger.info(`Loaded ${result.loaded} LinkedIn account(s) from environment variables`);
+      }
+    } catch (error) {
+      logger.warn(`Failed to load LinkedIn accounts from env: ${error.message}`);
+    }
 
     // Create and configure app
     const app = createApp();

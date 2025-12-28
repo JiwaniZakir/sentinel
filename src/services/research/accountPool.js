@@ -405,6 +405,79 @@ async function deleteAccount(accountId) {
 }
 
 /**
+ * Load accounts from LINKEDIN_ACCOUNTS environment variable
+ * Called on startup to sync env vars with database
+ */
+async function loadAccountsFromEnv() {
+  const accountsJson = process.env.LINKEDIN_ACCOUNTS;
+  
+  if (!accountsJson) {
+    logger.info('[AccountPool] No LINKEDIN_ACCOUNTS environment variable found, skipping auto-load');
+    return { loaded: 0, skipped: 0, errors: 0 };
+  }
+  
+  try {
+    const accounts = JSON.parse(accountsJson);
+    
+    if (!Array.isArray(accounts)) {
+      logger.error('[AccountPool] LINKEDIN_ACCOUNTS must be a JSON array');
+      return { loaded: 0, skipped: 0, errors: 1 };
+    }
+    
+    logger.info(`[AccountPool] Found ${accounts.length} account(s) in LINKEDIN_ACCOUNTS env var`);
+    
+    let loaded = 0;
+    let skipped = 0;
+    let errors = 0;
+    
+    for (const account of accounts) {
+      try {
+        const { linkedinEmail, linkedinPassword, gmailEmail, gmailAppPassword } = account;
+        
+        if (!linkedinEmail || !linkedinPassword || !gmailEmail || !gmailAppPassword) {
+          logger.error('[AccountPool] Missing required fields in LINKEDIN_ACCOUNTS entry');
+          errors++;
+          continue;
+        }
+        
+        // Check if account already exists
+        const existing = await prisma.linkedInAccount.findUnique({
+          where: { email: gmailEmail },
+        });
+        
+        if (existing) {
+          logger.info(`[AccountPool] Account ${gmailEmail} already exists, skipping`);
+          skipped++;
+          continue;
+        }
+        
+        // Add the account
+        await addAccount({
+          linkedinEmail,
+          linkedinPassword,
+          gmailEmail,
+          gmailAppPassword,
+        });
+        
+        logger.info(`[AccountPool] Successfully loaded account: ${gmailEmail}`);
+        loaded++;
+        
+      } catch (error) {
+        logger.error(`[AccountPool] Error loading account: ${error.message}`);
+        errors++;
+      }
+    }
+    
+    logger.info(`[AccountPool] Auto-load complete: ${loaded} loaded, ${skipped} skipped, ${errors} errors`);
+    return { loaded, skipped, errors };
+    
+  } catch (error) {
+    logger.error(`[AccountPool] Failed to parse LINKEDIN_ACCOUNTS: ${error.message}`);
+    return { loaded: 0, skipped: 0, errors: 1 };
+  }
+}
+
+/**
  * Get pool statistics
  */
 async function getPoolStats() {
@@ -469,6 +542,7 @@ module.exports = {
   updateAccountStatus,
   resetAccount,
   deleteAccount,
+  loadAccountsFromEnv,
   
   // Statistics
   getPoolStats,
