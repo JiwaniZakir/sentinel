@@ -5,11 +5,9 @@
  * Handles intelligent account rotation, health tracking, and cooldown management.
  */
 
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../database');
 const sessionManager = require('./sessionManager');
 const { logger } = require('../../utils/logger');
-
-const prisma = new PrismaClient();
 
 // Daily scrape limit per account (conservative)
 const DAILY_LIMIT_PER_ACCOUNT = parseInt(process.env.LINKEDIN_DAILY_LIMIT_PER_ACCOUNT || '75', 10);
