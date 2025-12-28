@@ -103,7 +103,15 @@ async function handleDM(app) {
         });
         
         // Start research in background (don't block the conversation)
-        triggerResearchAsync(userId, linkedinUrl, conversation.id);
+        // Pass any name/firm we have from the conversation so far
+        const existingPartner = await db.partners.findBySlackId(userId);
+        triggerResearchAsync(
+          userId, 
+          linkedinUrl, 
+          conversation.id,
+          existingPartner?.name,
+          existingPartner?.firm
+        );
         
         // Check if we already have research from a previous message
         const existingPartner = await db.partners.findBySlackId(userId);
@@ -215,6 +223,22 @@ async function handleOnboardingComplete(client, userId, conversation, extractedD
     console.log('Marking conversation complete...');
     await db.conversations.complete(conversation.id, partner.id, extractedData);
     console.log('Conversation marked complete');
+
+    // Trigger research if it hasn't been started yet
+    if (config.research.enabled && !partner.researchStatus) {
+      console.log('Research not started yet, triggering now...');
+      const linkedinUrl = extractedData.linkedin_url || partner.linkedinUrl;
+      
+      if (linkedinUrl || (partner.name && partner.firm)) {
+        // Start research in background (don't wait for it)
+        triggerResearchAsync(userId, linkedinUrl, conversation.id, partner.name, partner.firm)
+          .catch(err => console.error('Background research failed:', err.message));
+        
+        console.log('Research triggered with:', { linkedinUrl, name: partner.name, firm: partner.firm });
+      } else {
+        console.log('Insufficient data for research (need LinkedIn URL or name+firm)');
+      }
+    }
 
     // Generate introduction message with research context if available
     console.log('Generating intro message...');
@@ -428,10 +452,13 @@ function extractTwitterUsername(partner, conversationData) {
  * 4. Profile Aggregation (PersonProfile, FirmProfile)
  * 5. Skip intro generation (will be done after onboarding completes)
  */
-async function triggerResearchAsync(userId, linkedinUrl, conversationId) {
+async function triggerResearchAsync(userId, linkedinUrl, conversationId, name = null, firm = null) {
   try {
     console.log('=== TRIGGERING FULL RESEARCH PIPELINE (ASYNC) ===');
-    console.log('User:', userId, 'LinkedIn:', linkedinUrl);
+    console.log('User:', userId);
+    console.log('LinkedIn:', linkedinUrl || 'Not provided');
+    console.log('Name:', name || 'Not provided');
+    console.log('Firm:', firm || 'Not provided');
     
     // First, create or get the partner record
     let partner = await db.partners.findBySlackId(userId);
@@ -440,18 +467,20 @@ async function triggerResearchAsync(userId, linkedinUrl, conversationId) {
       // Create a placeholder partner record for research
       partner = await db.partners.create({
         slackUserId: userId,
-        name: 'Pending',
-        firm: 'Pending',
+        name: name || 'Pending',
+        firm: firm || 'Pending',
         partnerType: 'OTHER',
         linkedinUrl,
         researchStatus: 'PENDING',
       });
     } else {
-      // Update with LinkedIn URL
-      await db.partners.update(userId, {
-        linkedinUrl,
-        researchStatus: 'PENDING',
-      });
+      // Update with LinkedIn URL and research status
+      const updateData = { researchStatus: 'PENDING' };
+      if (linkedinUrl) updateData.linkedinUrl = linkedinUrl;
+      if (name && !partner.name) updateData.name = name;
+      if (firm && !partner.firm) updateData.firm = firm;
+      
+      await db.partners.update(userId, updateData);
     }
     
     // Try to extract Twitter username from conversation
@@ -469,8 +498,8 @@ async function triggerResearchAsync(userId, linkedinUrl, conversationId) {
       // Start the FULL research pipeline (all 5 stages)
       console.log('Starting full 5-stage pipeline...');
       const pipelineResult = await research.runFullPipeline(partner.id, linkedinUrl, {
-        name: null, // Will be extracted from LinkedIn/Wikipedia
-        firm: null, // Will be extracted from LinkedIn/Perplexity
+        name: name || partner.name, // Use provided name or partner name
+        firm: firm || partner.firm, // Use provided firm or partner firm
         partnerType: partner.partnerType || 'OTHER',
         generateIntro: false, // Don't generate intro yet - will use onboarding data
         crawlCitations: true, // Enable citation crawling
@@ -512,6 +541,8 @@ async function triggerResearchAsync(userId, linkedinUrl, conversationId) {
       // Quick research (Stage 1 only) - legacy mode
       console.log('Starting quick research (Stage 1 only)...');
       const researchResult = await research.startResearch(partner.id, linkedinUrl, {
+        name: name || partner.name, // Use provided name or partner name
+        firm: firm || partner.firm, // Use provided firm or partner firm
         skipLinkedIn: !config.research.linkedin.email,
       });
       

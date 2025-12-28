@@ -59,7 +59,19 @@ function checkRateLimit() {
 async function startResearch(partnerId, linkedinUrl, options = {}) {
   console.log('=== RESEARCH ORCHESTRATOR STARTED ===');
   console.log('Partner ID:', partnerId);
-  console.log('LinkedIn URL:', linkedinUrl);
+  console.log('LinkedIn URL:', linkedinUrl || 'Not provided');
+  console.log('Name:', options.name || 'Not provided');
+  console.log('Firm:', options.firm || 'Not provided');
+  
+  // Validate: Need either LinkedIn URL OR name+firm
+  if (!linkedinUrl && (!options.name || !options.firm)) {
+    console.log('Insufficient data for research');
+    return {
+      success: false,
+      error: 'Need either LinkedIn URL or name+firm for research',
+      error_type: 'INSUFFICIENT_DATA',
+    };
+  }
   
   // Check rate limit
   if (!checkRateLimit()) {
@@ -580,6 +592,22 @@ async function getPartnerResearch(partnerId) {
 async function runFullPipeline(partnerId, linkedinUrl, options = {}) {
   console.log('=== FULL RESEARCH PIPELINE STARTED ===');
   console.log('Partner ID:', partnerId);
+  console.log('LinkedIn URL:', linkedinUrl || 'Not provided');
+  console.log('Name:', options.name || 'Not provided');
+  console.log('Firm:', options.firm || 'Not provided');
+  
+  // Validate: Need either LinkedIn URL OR name+firm
+  if (!linkedinUrl && (!options.name || !options.firm)) {
+    console.log('⚠️ Insufficient data for research pipeline');
+    return {
+      success: false,
+      error: 'Need either LinkedIn URL or name+firm for research',
+      stages: {},
+      timing: {},
+      errors: [{ stage: 'validation', error: 'INSUFFICIENT_DATA' }],
+    };
+  }
+  
   const startTime = Date.now();
   
   const pipelineResults = {
