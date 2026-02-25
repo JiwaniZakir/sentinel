@@ -1,4 +1,4 @@
-# Foundry Partner Bot - Complete System Overview
+# Sentinel - Complete System Overview
 
 ## 🎯 What's Built
 
@@ -103,7 +103,7 @@ You now have a **fully automated partner onboarding system** that:
 ## 📁 File Structure
 
 ```
-Foundry_Bot_Slack/
+sentinel/
 ├── src/
 │   ├── app.js                          # Bolt app initialization
 │   ├── index.js                        # Entry point

@@ -18,7 +18,7 @@ async function main() {
   const firm = process.argv[4] || null;
   
   console.log('╔════════════════════════════════════════════════════════════╗');
-  console.log('║     FOUNDRY BOT - STANDALONE RESEARCH PIPELINE TEST        ║');
+  console.log('║     SENTINEL - STANDALONE RESEARCH PIPELINE TEST             ║');
   console.log('╚════════════════════════════════════════════════════════════╝');
   console.log('');
   console.log('🔗 LinkedIn URL:', linkedinUrl);

@@ -32,7 +32,7 @@ LINKEDIN_COOLDOWN_HOURS=6
 TWITTER_BEARER_TOKEN=AAAAAAAAAAAAAAAAAAAAABn...
 
 # === CONFIGURATION ===
-ORG_NAME=The Foundry
+ORG_NAME=Community
 NODE_ENV=production
 PORT=3000
 ```
@@ -353,4 +353,6 @@ Once all checks pass:
 - 🔬 [Research Architecture](./RESEARCH_ARCHITECTURE.md)
 - 🔐 [LinkedIn Session Manager](./LINKEDIN_SESSION_MANAGER_SETUP.md)
 - 📝 [Production Checklist](./PRODUCTION_CHECKLIST.md)
+
+
 

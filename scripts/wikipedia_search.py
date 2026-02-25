@@ -30,7 +30,7 @@ def search_wikipedia(query, search_type='person'):
     
     # Initialize Wikipedia API with a proper user agent
     wiki = wikipediaapi.Wikipedia(
-        user_agent='PartnerBot/1.0 (https://github.com/foundry-bot; contact@foundry.com)',
+        user_agent='SentinelBot/1.0 (https://github.com/your-org/sentinel; contact@example.com)',
         language='en'
     )
     

@@ -7,7 +7,7 @@
 3. Click **"create another app..."** or **"are you a developer? create an app..."**
 
 4. Fill in the form:
-   - **Name**: `Foundry Partner Research Bot`
+   - **Name**: `Partner Research Bot`
    - **App type**: Select **"script"**
    - **Description**: `Research bot for partner intelligence gathering`
    - **About URL**: (leave blank or add your org website)
@@ -20,7 +20,7 @@
 After creating the app, you'll see:
 
 ```
-Foundry Partner Research Bot
+Partner Research Bot
 personal use script
 <your_client_id>          ← This is your CLIENT ID (14 characters)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -37,7 +37,7 @@ In Railway Dashboard → Your Project → Variables:
 ```bash
 REDDIT_CLIENT_ID=<your_14_char_client_id>
 REDDIT_CLIENT_SECRET=<your_27_char_client_secret>
-REDDIT_USER_AGENT=FoundryBot/1.0 (by /u/YOUR_REDDIT_USERNAME)
+REDDIT_USER_AGENT=SentinelBot/1.0 (by /u/YOUR_REDDIT_USERNAME)
 ```
 
 **Important**: Update `YOUR_REDDIT_USERNAME` with your actual Reddit username in the User-Agent!
@@ -152,7 +152,7 @@ Reddit API (script app):
 
 ### "403 Forbidden"
 - Check your USER_AGENT includes your Reddit username
-- Format: `FoundryBot/1.0 (by /u/your_username)`
+- Format: `SentinelBot/1.0 (by /u/your_username)`
 
 ### "User not found"
 - Reddit username doesn't exist or is shadowbanned

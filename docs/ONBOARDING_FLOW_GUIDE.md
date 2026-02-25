@@ -77,7 +77,7 @@ The bot sends a DM with 3 buttons:
 ```
 Hey John! 👋
 
-Welcome to The Foundry! We're thrilled to have you join our community of 
+Welcome to the community! We're thrilled to have you join our network of
 partners supporting early-stage founders.
 
 I'd love to learn a bit about you so we can connect you with the right 

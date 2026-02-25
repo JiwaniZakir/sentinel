@@ -43,7 +43,7 @@ const config = {
   reddit: {
     clientId: process.env.REDDIT_CLIENT_ID,
     clientSecret: process.env.REDDIT_CLIENT_SECRET,
-    userAgent: process.env.REDDIT_USER_AGENT || 'FoundryBot/1.0',
+    userAgent: process.env.REDDIT_USER_AGENT || 'SentinelBot/1.0',
   },
 
   // Podcast Analysis (opt-in, uses Whisper + GPT-4)
@@ -57,7 +57,7 @@ const config = {
   databaseUrl: process.env.DATABASE_URL,
 
   // Organization
-  orgName: process.env.ORG_NAME || 'Foundry',
+  orgName: process.env.ORG_NAME || 'Community',
   adminSlackIds: (process.env.ADMIN_SLACK_IDS || '').split(',').filter(Boolean),
 
   // Channel IDs

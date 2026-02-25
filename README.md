@@ -1,270 +1,198 @@
-# Foundry Partner Bot
+# Sentinel
 
-An AI-powered Slack bot for automating partner onboarding and community management for non-profit founder support organizations.
+[![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Slack Bolt](https://img.shields.io/badge/Slack_Bolt-4A154B?logo=slack&logoColor=white)](https://slack.dev/bolt-js/)
+[![GPT-4](https://img.shields.io/badge/GPT--4-412991?logo=openai&logoColor=white)](https://openai.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+AI-powered Slack bot for intelligent community management — automated onboarding, multi-source research pipeline, personalized outreach with human-in-the-loop approval.
+
+---
+
+## Architecture
+
+```mermaid
+graph TD
+    A[New Member Joins] --> B[Conversational Onboarding]
+    B --> C{GPT-4 Analysis}
+    C --> D[Partner Classification]
+    D --> E[5-Stage Research Pipeline]
+
+    E --> E1[LinkedIn Scraping]
+    E --> E2[Perplexity AI]
+    E --> E3[Tavily Search]
+    E --> E4[Twitter/X API]
+    E --> E5[Wikipedia + Web Crawler]
+
+    E1 & E2 & E3 & E4 & E5 --> F[Profile Aggregation]
+    F --> G[Quality Scoring]
+    G --> H[AI Introduction Generation]
+    H --> I[Admin Approval Queue]
+    I -->|Approved| J[Personalized Outreach]
+    I -->|Rejected| K[Draft Discarded]
+
+    L[Scheduled Jobs] --> M[Bi-Weekly Digest]
+    L --> N[Event Outreach]
+    M & N --> I
+```
 
 ## Features
 
-### 🤖 AI-Powered Onboarding
-- Multi-turn conversational onboarding using GPT-4
-- Automatic partner type detection (VC, Corporate, Community Builder, Angel)
-- Personalized introduction generation with comprehensive research
-- Auto-assignment to user groups and channels
+### Conversational Onboarding
+Multi-turn GPT-4 powered intake flow that classifies new members (VC, Corporate, Community Builder, Angel) through natural conversation, then triggers the research pipeline automatically.
 
-### 🔬 Advanced Research Integration
-- **LinkedIn Profile Scraping** with session management and account pooling
-- **Email Verification** automation via Gmail IMAP
-- **5-Stage Research Pipeline**: Data Collection, Citation Crawling, Quality & Fact Checking, Profile Aggregation, Introduction Generation
-- **Multiple Data Sources**: LinkedIn, Perplexity AI, Tavily, Twitter/X, Wikipedia, Web Crawler
-- **Session Persistence**: 30-day session caching reduces login frequency by 3x
-- **Intelligent Account Rotation**: Distribute load across 12+ LinkedIn accounts
+### 5-Stage Research Pipeline
+1. **Data Collection** — Parallel scraping across LinkedIn, Perplexity AI, Tavily, Twitter/X, Wikipedia, and web crawlers
+2. **Citation Crawling** — Follows references from initial results to build a complete picture
+3. **Quality & Fact Checking** — Cross-references claims across sources, flags contradictions
+4. **Profile Aggregation** — Merges data into a unified professional profile with confidence scores
+5. **Introduction Generation** — GPT-4 synthesizes a personalized introduction with key talking points
 
-### 📢 Personalized Event Outreach
-- Generate personalized event invitations for each partner
-- Admin approval workflow before any message is sent
-- Batch operations for efficiency
-- Message customization before sending
+### LinkedIn Intelligence
+- Session persistence with 30-day cookie caching (3x fewer logins)
+- Account pooling across 12+ accounts with intelligent rotation
+- Automated email verification via Gmail IMAP
+- AES-256-GCM encrypted credential storage
+- Rate limiting (75 scrapes/day/account) with configurable cooldowns
 
-### 📰 Bi-Weekly Digest
-- Automated community digest generation
-- Highlights, event recaps, new partners, featured founders
-- Scheduled delivery with admin approval
+### Event Outreach
+Generates personalized event invitations for each member based on their profile and interests. Every message passes through the admin approval queue — the bot never sends unsanctioned communications.
 
-### 🔒 Admin Approval Workflow
-**Critical**: The bot NEVER sends messages to partners without explicit admin approval. All outgoing communications are drafted and queued in `#bot-admin` for review.
+### Bi-Weekly Digest
+Automated community digest with highlights, event recaps, new member spotlights, and featured content. Scheduled delivery with admin review before distribution.
+
+### Human-in-the-Loop Approval
+All outgoing communications are drafted and queued in `#bot-admin` for explicit approval. Admins can edit, approve, or reject any message before it reaches members.
+
+---
 
 ## Tech Stack
 
-- **Runtime**: Node.js 20+
-- **Framework**: Slack Bolt SDK
-- **AI**: OpenAI GPT-4 / GPT-4o, Perplexity AI
-- **Research APIs**: Tavily, Twitter API v2, Wikipedia API
-- **Database**: PostgreSQL (Prisma ORM)
-- **Scraping**: Python Selenium, Chromium
-- **Email**: Gmail IMAP (for LinkedIn verification)
-- **Security**: AES-256-GCM encryption for credentials
-- **Deployment**: Railway (Nixpacks)
+| Component | Technology |
+|-----------|-----------|
+| Runtime | Node.js 20+ |
+| Framework | Slack Bolt SDK (Socket Mode) |
+| AI | OpenAI GPT-4 / GPT-4o |
+| Research | Perplexity AI, Tavily, Twitter API v2, Wikipedia |
+| Database | PostgreSQL + Prisma ORM |
+| Scraping | Python Selenium + Chromium |
+| Email | Gmail IMAP (verification automation) |
+| Security | AES-256-GCM encryption |
+| Scheduling | node-cron |
+| Logging | Pino |
+| Deployment | Railway (Nixpacks) |
 
 ## Project Structure
 
 ```
-src/
-├── app.js                    # Bolt app initialization
-├── index.js                  # Entry point
-├── config/                   # Environment configuration
-├── listeners/
-│   ├── events/               # Slack event handlers
-│   ├── messages/             # DM conversation handler
-│   ├── actions/              # Button/modal action handlers
-│   └── commands/             # Slash command handlers
-├── services/
-│   ├── openai.js             # OpenAI API integration
-│   ├── database.js           # Prisma database operations
-│   ├── slack.js              # Slack API helpers
-│   ├── scheduler.js          # Cron job management
-│   └── research/             # Research pipeline
-│       ├── accountPool.js    # LinkedIn account rotation
-│       ├── sessionManager.js # Session persistence & encryption
-│       ├── emailVerification.js # Gmail IMAP verification
-│       ├── linkedin.js       # LinkedIn scraper integration
-│       ├── perplexity.js     # Perplexity AI research
-│       ├── tavily.js         # Tavily search
-│       ├── twitter.js        # Twitter/X API integration
-│       ├── wikipedia.js      # Wikipedia search
-│       ├── crawler.js        # Web crawler for citations
-│       ├── orchestrator.js   # Research pipeline coordinator
-│       └── introGenerator.js # AI introduction generator
-├── prompts/                  # AI prompt templates
-├── templates/                # Slack Block Kit templates
-├── utils/                    # Helpers and utilities
-└── scripts/                  # Python scraping scripts
-    └── scrape_linkedin.py    # LinkedIn Selenium scraper
+sentinel/
+├── src/
+│   ├── index.js                  # Server initialization
+│   ├── app.js                    # Bolt app configuration
+│   ├── config/                   # Environment & settings
+│   ├── listeners/
+│   │   ├── events/               # member_joined, app_home_opened
+│   │   ├── messages/             # DM conversation handler
+│   │   ├── actions/              # Approval buttons, modals
+│   │   └── commands/             # Slash command router
+│   ├── services/
+│   │   ├── openai.js             # GPT-4 integration
+│   │   ├── database.js           # Prisma operations
+│   │   ├── slack.js              # Slack API helpers
+│   │   ├── scheduler.js          # Cron job management
+│   │   └── research/
+│   │       ├── index.js          # Pipeline orchestrator
+│   │       ├── accountPool.js    # LinkedIn account rotation
+│   │       ├── sessionManager.js # Session persistence + encryption
+│   │       ├── emailVerification.js
+│   │       ├── linkedin.js
+│   │       ├── perplexity.js
+│   │       ├── tavily.js
+│   │       ├── twitter.js
+│   │       ├── wikipedia.js
+│   │       ├── crawler.js        # Citation web crawler
+│   │       ├── aggregator.js     # Multi-source profile merger
+│   │       ├── qualityScorer.js  # Cross-reference validation
+│   │       └── introGenerator.js # AI introduction synthesis
+│   ├── prompts/                  # System prompt templates
+│   ├── templates/                # Slack Block Kit templates
+│   └── utils/
+├── prisma/
+│   └── schema.prisma             # Database schema
+├── scripts/
+│   └── scrape_linkedin.py        # Selenium scraper
+└── docs/                         # Setup & architecture guides
 ```
 
-## Setup
+## Quick Start
 
 ### Prerequisites
 
 - Node.js 20+
-- PostgreSQL database
-- Slack workspace (Pro or Business+ plan)
+- PostgreSQL
+- Slack workspace (Pro or Business+)
 - OpenAI API key
-- **For Research Features**:
-  - Perplexity API key
-  - Tavily API key
-  - 1-12 burner LinkedIn accounts with Gmail verification
-  - Python 3.9+ with Selenium
-  - Chromium browser
 
-### 1. Clone and Install
+### Installation
 
 ```bash
-git clone https://github.com/JiwaniZakir/Foundry_Bot_Slack.git
-cd Foundry_Bot_Slack
+git clone https://github.com/JiwaniZakir/sentinel.git
+cd sentinel
 npm install
-```
 
-### 2. Configure Environment
-
-```bash
+# Configure environment
 cp .env.example .env
 # Edit .env with your credentials
-```
 
-### 3. Set Up Database
-
-```bash
+# Set up database
 npx prisma generate
 npx prisma db push
+
+# Start (Socket Mode)
+npm run dev
 ```
 
-### 4. Configure Slack App
+### Slack App Setup
 
 1. Create app at [api.slack.com/apps](https://api.slack.com/apps)
-2. Add Bot Token Scopes (see below)
-3. Enable Event Subscriptions
-4. Enable Interactivity
+2. Enable Socket Mode
+3. Add Bot Token Scopes: `channels:join`, `channels:manage`, `channels:read`, `chat:write`, `chat:write.public`, `groups:read`, `groups:write`, `im:history`, `im:read`, `im:write`, `users:read`, `users:read.email`, `commands`, `files:write`
+4. Subscribe to events: `team_join`, `member_joined_channel`, `app_home_opened`, `message.im`
 5. Install to workspace
 
-### 5. Run
+### Slash Commands
 
-```bash
-# Development (Socket Mode)
-npm run dev
+| Command | Description |
+|---------|------------|
+| `/sentinel help` | Show available commands |
+| `/sentinel intro` | Start/redo onboarding |
+| `/sentinel events` | View upcoming events |
+| `/sentinel announce-event` | Create event outreach (admin) |
+| `/sentinel send-digest` | Generate community digest (admin) |
+| `/sentinel add-highlight <text>` | Add to digest (admin) |
+| `/sentinel partner-stats` | View pipeline statistics (admin) |
 
-# Production
-npm start
-```
+## Research Pipeline Setup
 
-## Slack App Configuration
+The research pipeline is optional but provides the most value. To enable LinkedIn intelligence:
 
-### Required Bot Token Scopes
-
-```
-channels:join
-channels:manage
-channels:read
-chat:write
-chat:write.public
-groups:read
-groups:write
-im:history
-im:read
-im:write
-reactions:read
-reactions:write
-team:read
-usergroups:read
-usergroups:write
-users:read
-users:read.email
-users.profile:read
-commands
-files:write
-```
-
-### Event Subscriptions
-
-- `team_join`
-- `member_joined_channel`
-- `app_home_opened`
-- `message.im`
-
-## Slash Commands
-
-### Partner Commands
-- `/partnerbot help` — Show help
-- `/partnerbot intro` — Start/redo onboarding
-- `/partnerbot events` — See upcoming events
-
-### Admin Commands
-- `/partnerbot announce-event` — Create event outreach
-- `/partnerbot send-digest` — Generate digest
-- `/partnerbot add-highlight <text>` — Add to digest
-- `/partnerbot partner-stats` — View statistics
-
-## LinkedIn Session Manager Setup
-
-The bot includes an advanced LinkedIn scraping system with:
-- **Session persistence** (30-day caching)
-- **Account pooling** (rotate across 12+ accounts)
-- **Automated email verification** (Gmail IMAP)
-- **Intelligent rate limiting** (75 scrapes/day per account)
-
-### Quick Setup
-
-See [LinkedIn Session Manager Quick Start](./docs/LINKEDIN_SESSION_MANAGER_QUICKSTART.md) for 15-minute setup.
-
-### Key Commands
-
-```bash
-# Generate encryption key
-/partnerbot linkedin-generate-key
-
-# View all accounts
-/partnerbot linkedin-accounts
-
-# Pool statistics
-/partnerbot linkedin-pool-stats
-
-# Add account (shows instructions)
-/partnerbot linkedin-add-account
-```
-
-### Required Environment Variables
-
-```bash
-# Encryption key for passwords and cookies (64-char hex)
-SESSION_ENCRYPTION_KEY=<generated-key>
-
-# Optional: Rate limiting
-LINKEDIN_DAILY_LIMIT_PER_ACCOUNT=75
-LINKEDIN_COOLDOWN_HOURS=6
-```
+1. Generate an encryption key: `/sentinel linkedin-generate-key`
+2. Add LinkedIn accounts to the pool (see [docs/LINKEDIN_SESSION_MANAGER_QUICKSTART.md](docs/LINKEDIN_SESSION_MANAGER_QUICKSTART.md))
+3. Configure API keys in `.env`:
+   ```bash
+   SESSION_ENCRYPTION_KEY=<generated-key>
+   PERPLEXITY_API_KEY=<key>
+   TAVILY_API_KEY=<key>
+   TWITTER_BEARER_TOKEN=<optional>
+   ```
 
 ### Documentation
 
-- 📘 [Quick Start Guide](./docs/LINKEDIN_SESSION_MANAGER_QUICKSTART.md) - 15-minute setup
-- 📖 [Full Setup Guide](./docs/LINKEDIN_SESSION_MANAGER_SETUP.md) - Complete documentation
-- 🏗️ [Research Architecture](./docs/RESEARCH_ARCHITECTURE.md) - System design
-
-## Railway Deployment
-
-1. Connect GitHub repo to Railway
-2. Add PostgreSQL database
-3. Set environment variables (including `SESSION_ENCRYPTION_KEY`)
-4. Deploy
-
-Railway will automatically:
-- Build using Nixpacks
-- Install Python dependencies
-- Run database migrations
-- Start the bot
-
-## Environment Variables
-
-See `.env.example` for all required variables.
-
-### Core Variables
-- `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_APP_TOKEN`
-- `DATABASE_URL`
-- `OPENAI_API_KEY`
-
-### Research Variables
-- `SESSION_ENCRYPTION_KEY` (required for LinkedIn)
-- `PERPLEXITY_API_KEY`
-- `TAVILY_API_KEY`
-- `TWITTER_BEARER_TOKEN` (optional)
-
-### Rate Limiting
-- `LINKEDIN_DAILY_LIMIT_PER_ACCOUNT=75`
-- `LINKEDIN_COOLDOWN_HOURS=6`
-
-Key variables:
-- `SLACK_BOT_TOKEN` — Bot OAuth token
-- `SLACK_SIGNING_SECRET` — App signing secret
-- `OPENAI_API_KEY` — OpenAI API key
-- `DATABASE_URL` — PostgreSQL connection string
-- `ADMIN_SLACK_IDS` — Comma-separated admin user IDs
+- [Quick Start Guide](docs/LINKEDIN_SESSION_MANAGER_QUICKSTART.md) — 15-minute LinkedIn setup
+- [Research Architecture](docs/RESEARCH_ARCHITECTURE.md) — System design deep-dive
+- [Onboarding Flow](docs/ONBOARDING_FLOW_GUIDE.md) — Conversation flow documentation
+- [Production Checklist](docs/PRODUCTION_CHECKLIST.md) — Deployment guide
 
 ## License
 

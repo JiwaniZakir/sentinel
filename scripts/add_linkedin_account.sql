@@ -1,5 +1,5 @@
 -- LinkedIn Account Setup SQL
--- Account: scrapinglinkedin868@gmail.com
+-- Replace placeholder values with your actual account details
 
 INSERT INTO "LinkedInAccount" (
   id,
@@ -16,10 +16,10 @@ INSERT INTO "LinkedInAccount" (
   updated_at
 ) VALUES (
   gen_random_uuid(),
-  'scrapinglinkedin868@gmail.com',
-  'scrapinglinkedin868@gmail.com',
-  'bd42aca9f4f83f6d59deb1c74b4179a4:07c2b597c2cea3610af9b54e02ca1532:df70d15c9ab90078ae5b',
-  'pipt uugw fnet vfsz',
+  'your_email@example.com',
+  'your_linkedin_email@example.com',
+  'your_encrypted_password',
+  'your_gmail_app_password',
   'ACTIVE',
   0,
   0,
@@ -29,8 +29,13 @@ INSERT INTO "LinkedInAccount" (
   NOW()
 );
 
+-- To generate encrypted_password, use the helper script:
+--   SESSION_ENCRYPTION_KEY=<your-key> node scripts/add_linkedin_account.js
+--
+-- Or use Prisma Studio:
+--   npm run db:studio
+
 -- Verify the account was added:
 SELECT id, email, linkedin_email, status, scrapes_today, total_scrapes, failure_count, created_at
 FROM "LinkedInAccount"
-WHERE email = 'scrapinglinkedin868@gmail.com';
-
+WHERE email = 'your_email@example.com';

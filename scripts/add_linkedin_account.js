@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 /**
  * Add LinkedIn Account to Pool
- * 
- * Usage: 
+ *
+ * Usage:
  *   SESSION_ENCRYPTION_KEY=<key> node scripts/add_linkedin_account.js
+ *
+ * Before running, update the accountDetails object below with your
+ * actual LinkedIn account credentials.
  */
 
 require('dotenv').config();
@@ -18,7 +21,7 @@ async function main() {
   console.log('║        ADDING LINKEDIN ACCOUNT TO POOL                     ║');
   console.log('╚════════════════════════════════════════════════════════════╝');
   console.log('');
-  
+
   if (!process.env.SESSION_ENCRYPTION_KEY) {
     console.error('❌ ERROR: SESSION_ENCRYPTION_KEY not set');
     console.error('');
@@ -27,26 +30,29 @@ async function main() {
     console.error('');
     process.exit(1);
   }
-  
-  // Account details (you provided)
+
+  // ========================================
+  // UPDATE THESE WITH YOUR ACCOUNT DETAILS
+  // ========================================
   const accountDetails = {
-    gmailEmail: 'scrapinglinkedin868@gmail.com',
-    linkedinEmail: 'scrapinglinkedin868@gmail.com',
-    linkedinPassword: '123_Qwerty',
-    gmailAppPassword: 'pipt uugw fnet vfsz',
+    gmailEmail: 'your_email@example.com',
+    linkedinEmail: 'your_linkedin_email@example.com',
+    linkedinPassword: 'your_linkedin_password',
+    gmailAppPassword: 'your_gmail_app_password',
   };
-  
+  // ========================================
+
   console.log('📝 Account Details:');
   console.log(`   Gmail: ${accountDetails.gmailEmail}`);
   console.log(`   LinkedIn: ${accountDetails.linkedinEmail}`);
   console.log('');
-  
+
   try {
     // Check if account already exists
     const existing = await prisma.linkedInAccount.findUnique({
       where: { email: accountDetails.gmailEmail },
     });
-    
+
     if (existing) {
       console.log('⚠️  Account already exists in database');
       console.log('');
@@ -59,13 +65,13 @@ async function main() {
       await prisma.$disconnect();
       process.exit(0);
     }
-    
+
     // Encrypt password
     console.log('🔐 Encrypting LinkedIn password...');
     const encryptedPassword = sessionManager.encryptPassword(accountDetails.linkedinPassword);
     console.log('✅ Password encrypted');
     console.log('');
-    
+
     // Create account
     console.log('💾 Adding account to database...');
     const account = await prisma.linkedInAccount.create({
@@ -80,7 +86,7 @@ async function main() {
         failureCount: 0,
       },
     });
-    
+
     console.log('');
     console.log('═══════════════════════════════════════════════════════════════');
     console.log('  ✅ ACCOUNT ADDED SUCCESSFULLY');
@@ -104,7 +110,7 @@ async function main() {
     console.log('');
     console.log('═══════════════════════════════════════════════════════════════');
     console.log('');
-    
+
   } catch (error) {
     console.error('');
     console.error('❌ ERROR:', error.message);
@@ -122,4 +128,3 @@ async function main() {
 }
 
 main();
-

@@ -1,47 +1,48 @@
 # LinkedIn Account Setup - Complete Guide
 
-## ✅ What's Been Done
+## Overview
 
-### 1. Encryption Key Generated
+This guide walks you through setting up LinkedIn scraping accounts for the research pipeline. You will need:
 
-```
-SESSION_ENCRYPTION_KEY=e547bb6cac0dc6d440d522297f5571b93ba66c1c22a2ea7ffa0a60e40fd8d167
-```
-
-### 2. LinkedIn Password Encrypted
-
-```
-Encrypted Password: bd42aca9f4f83f6d59deb1c74b4179a4:07c2b597c2cea3610af9b54e02ca1532:df70d15c9ab90078ae5b
-```
-
-### 3. Account Details
-
-- **Gmail Email**: scrapinglinkedin868@gmail.com
-- **LinkedIn Email**: scrapinglinkedin868@gmail.com
-- **Gmail App Password**: pipt uugw fnet vfsz
-- **Status**: Ready to add to database
+1. A generated encryption key
+2. One or more LinkedIn accounts with Gmail-based email verification
+3. Gmail App Passwords for automated verification
 
 ---
 
-## 📋 Setup Steps
+## Step 1: Generate Encryption Key
 
-### Step 1: Add Encryption Key to Railway
+In Slack, run:
+```
+/partnerbot linkedin-generate-key
+```
 
-1. Go to Railway Dashboard → Your Project
+Or generate one manually:
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Copy the 64-character hex key.
+
+---
+
+## Step 2: Add Encryption Key to Railway
+
+1. Go to Railway Dashboard -> Your Project
 2. Click on "Variables" tab
 3. Click "+ New Variable"
 4. Add:
    ```
    Name: SESSION_ENCRYPTION_KEY
-   Value: e547bb6cac0dc6d440d522297f5571b93ba66c1c22a2ea7ffa0a60e40fd8d167
+   Value: <your-64-char-hex-key>
    ```
 5. Click "Add" and Railway will redeploy automatically
 
-⚠️ **Important**: Save this key securely. Never change it once set (data will be unreadable).
+**Important**: Save this key securely. Never change it once set (existing encrypted data will become unreadable).
 
 ---
 
-### Step 2: Push Database Schema
+## Step 3: Push Database Schema
 
 Run this locally (if you have DATABASE_URL set) or via Railway console:
 
@@ -59,15 +60,17 @@ This creates the `linkedin_accounts` table.
 
 ---
 
-### Step 3: Add Account to Database
+## Step 4: Add Account to Database
 
 You have **3 options**:
 
-#### Option A: Use Helper Script (Easiest) ⭐
+#### Option A: Use Helper Script (Easiest)
+
+First, update `scripts/add_linkedin_account.js` with your account details, then run:
 
 ```bash
 # Make sure DATABASE_URL is set in your .env or environment
-SESSION_ENCRYPTION_KEY=e547bb6cac0dc6d440d522297f5571b93ba66c1c22a2ea7ffa0a60e40fd8d167 node scripts/add_linkedin_account.js
+SESSION_ENCRYPTION_KEY=<your-key> node scripts/add_linkedin_account.js
 ```
 
 This will:
@@ -87,10 +90,10 @@ npm run db:studio
 
 | Field | Value |
 |-------|-------|
-| `email` | scrapinglinkedin868@gmail.com |
-| `linkedinEmail` | scrapinglinkedin868@gmail.com |
-| `encryptedPassword` | bd42aca9f4f83f6d59deb1c74b4179a4:07c2b597c2cea3610af9b54e02ca1532:df70d15c9ab90078ae5b |
-| `gmailAppPassword` | pipt uugw fnet vfsz |
+| `email` | your_email@example.com |
+| `linkedinEmail` | your_linkedin_email@example.com |
+| `encryptedPassword` | (use the helper script to generate this) |
+| `gmailAppPassword` | your_gmail_app_password |
 | `status` | ACTIVE |
 | `scrapesToday` | 0 |
 | `totalScrapes` | 0 |
@@ -100,39 +103,11 @@ npm run db:studio
 
 #### Option C: Use SQL Directly
 
-Connect to your PostgreSQL database and run:
-
-```sql
-INSERT INTO "LinkedInAccount" (
-  id,
-  email,
-  linkedin_email,
-  encrypted_password,
-  gmail_app_password,
-  status,
-  scrapes_today,
-  total_scrapes,
-  failure_count,
-  created_at,
-  updated_at
-) VALUES (
-  gen_random_uuid(),
-  'scrapinglinkedin868@gmail.com',
-  'scrapinglinkedin868@gmail.com',
-  'bd42aca9f4f83f6d59deb1c74b4179a4:07c2b597c2cea3610af9b54e02ca1532:df70d15c9ab90078ae5b',
-  'pipt uugw fnet vfsz',
-  'ACTIVE',
-  0,
-  0,
-  0,
-  NOW(),
-  NOW()
-);
-```
+Connect to your PostgreSQL database and run the SQL template from `scripts/add_linkedin_account.sql`.
 
 ---
 
-### Step 4: Verify Setup
+## Step 5: Verify Setup
 
 Once Railway redeploys with the encryption key, test in Slack:
 
@@ -143,7 +118,7 @@ Once Railway redeploys with the encryption key, test in Slack:
 
 Expected output:
 ```
-📊 LinkedIn Account Pool Stats
+LinkedIn Account Pool Stats
 
 Total Accounts: 1
 Active: 1
@@ -160,7 +135,7 @@ Total Scrapes (All Time): 0
 
 ---
 
-### Step 5: Test LinkedIn Scraping
+## Step 6: Test LinkedIn Scraping
 
 Test with a LinkedIn URL:
 
@@ -171,7 +146,7 @@ Test with a LinkedIn URL:
 **What happens:**
 1. Bot selects your account from the pool
 2. Logs into LinkedIn (or uses existing session)
-3. If verification code needed → fetches from Gmail automatically
+3. If verification code needed, fetches from Gmail automatically
 4. Completes login and scrapes profile
 5. Returns profile data
 
@@ -181,7 +156,7 @@ Test with a LinkedIn URL:
 
 ---
 
-## 🔍 Troubleshooting
+## Troubleshooting
 
 ### Issue: "SESSION_ENCRYPTION_KEY not found"
 
@@ -210,7 +185,7 @@ If it still fails after 3 attempts, the account may need manual verification.
 
 ---
 
-## 📊 Monitoring
+## Monitoring
 
 ### Check Account Health
 
@@ -222,7 +197,7 @@ If it still fails after 3 attempts, the account may need manual verification.
 /partnerbot linkedin-pool-stats
 ```
 
-### Check Account Usage
+### Account Metrics
 
 The account tracks:
 - `scrapesToday`: How many scrapes today (resets at midnight)
@@ -241,20 +216,20 @@ If you need more:
 
 ---
 
-## 🚀 Next Steps
+## Scaling to 12 Accounts
 
-### Scale to 12 Accounts
-
-Once this account is working:
-1. Create 11 more burner LinkedIn accounts
+Once your first account is working:
+1. Create additional LinkedIn accounts
 2. Set up Gmail accounts with App Passwords
 3. Add each using Option A, B, or C above
 
 **Capacity with 12 accounts:**
-- 12 accounts × 75 scrapes/day = **900 scrapes/day**
+- 12 accounts x 75 scrapes/day = **900 scrapes/day**
 - Enough for 100+ partners/day (most need ~5 scrapes)
 
-### Integrate with Onboarding
+---
+
+## Integration with Onboarding
 
 The account pool is already integrated! When a partner shares their LinkedIn URL during onboarding:
 
@@ -263,36 +238,24 @@ The account pool is already integrated! When a partner shares their LinkedIn URL
 3. Falls back to Tavily if LinkedIn fails
 4. Continues with research pipeline
 
-**No additional setup needed!** ✨
+**No additional setup needed!**
 
 ---
 
-## 📝 Summary
+## Summary
 
-**Status:** ✅ Ready to deploy
-
-**What you have:**
-- ✅ Encryption key generated
-- ✅ Password encrypted
-- ✅ Account details prepared
-- ✅ Helper scripts created
-
-**What to do:**
-1. Add `SESSION_ENCRYPTION_KEY` to Railway
-2. Push database schema (`npm run db:push`)
-3. Add account (Option A, B, or C)
-4. Test (`/partnerbot linkedin-pool-stats`)
-5. Test scraping (`/partnerbot test-linkedin <url>`)
+**Setup steps:**
+1. Generate encryption key (`/partnerbot linkedin-generate-key`)
+2. Add `SESSION_ENCRYPTION_KEY` to Railway
+3. Push database schema (`npm run db:push`)
+4. Add account (Option A, B, or C)
+5. Test (`/partnerbot linkedin-pool-stats`)
+6. Test scraping (`/partnerbot test-linkedin <url>`)
 
 **Time to complete:** ~5 minutes
 
 ---
 
-## 🎉 Done!
-
-Once tested, your LinkedIn scraping is production-ready and integrated with the onboarding flow!
-
-For questions, see:
+For additional documentation, see:
 - [LinkedIn Session Manager Setup](./LINKEDIN_SESSION_MANAGER_SETUP.md)
 - [LinkedIn Session Manager Quick Start](./LINKEDIN_SESSION_MANAGER_QUICKSTART.md)
-

@@ -133,7 +133,7 @@ RESEARCH_RATE_LIMIT=20  # Max partners per day
 # Reddit (dormant until you add)
 REDDIT_CLIENT_ID=<your_client_id>
 REDDIT_CLIENT_SECRET=<your_client_secret>
-REDDIT_USER_AGENT=FoundryBot/1.0 (by /u/YOUR_USERNAME)
+REDDIT_USER_AGENT=SentinelBot/1.0 (by /u/YOUR_USERNAME)
 
 # Podcast Analysis (opt-in, adds ~$1/partner)
 PODCAST_ANALYSIS_ENABLED=false  # Set to 'true' to enable

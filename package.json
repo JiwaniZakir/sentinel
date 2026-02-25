@@ -1,5 +1,5 @@
 {
-  "name": "foundry-partner-bot",
+  "name": "sentinel",
   "version": "1.0.0",
   "description": "AI-powered Slack bot for partner onboarding and community management",
   "main": "src/index.js",
