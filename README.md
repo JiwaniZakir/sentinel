@@ -1,12 +1,43 @@
+<div align="center">
+
 # Sentinel
 
-[![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![Slack Bolt](https://img.shields.io/badge/Slack_Bolt-4A154B?logo=slack&logoColor=white)](https://slack.dev/bolt-js/)
-[![GPT-4](https://img.shields.io/badge/GPT--4-412991?logo=openai&logoColor=white)](https://openai.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+**AI-powered Slack bot for intelligent community management.**
 
-AI-powered Slack bot for intelligent community management — automated onboarding, multi-source research pipeline, personalized outreach with human-in-the-loop approval.
+Automated onboarding, multi-source research, and personalized outreach — with human-in-the-loop approval at every step.
+
+<br />
+
+[![Node.js](https://img.shields.io/badge/Node.js_20+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Slack Bolt](https://img.shields.io/badge/Slack_Bolt-4A154B?style=for-the-badge&logo=slack&logoColor=white)](https://slack.dev/bolt-js/)
+[![GPT-4](https://img.shields.io/badge/GPT--4-412991?style=for-the-badge&logo=openai&logoColor=white)](https://openai.com/)
+[![Prisma](https://img.shields.io/badge/Prisma-2D3748?style=for-the-badge&logo=prisma&logoColor=white)](https://www.prisma.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-58A6FF?style=for-the-badge)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/JiwaniZakir/sentinel?style=for-the-badge&color=58A6FF)](https://github.com/JiwaniZakir/sentinel/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/JiwaniZakir/sentinel?style=for-the-badge&color=58A6FF)](https://github.com/JiwaniZakir/sentinel/network/members)
+
+<br />
+
+</div>
+
+---
+
+## Overview
+
+Sentinel is a Slack bot that automates the entire lifecycle of community member onboarding. When a new member joins, the bot conducts a natural, multi-turn GPT-4 conversation to learn about them, triggers a parallel research pipeline across six data sources, and generates a personalized introduction -- all within 60 seconds. Every outbound message passes through an admin approval queue, so the bot never sends anything unsanctioned.
+
+---
+
+## Features
+
+- **Conversational Onboarding** -- Multi-turn GPT-4 interview that classifies members (VC, Corporate, Community Builder, Angel) through natural dialogue
+- **5-Stage Research Pipeline** -- Parallel intelligence gathering across LinkedIn, Perplexity AI, Tavily, Twitter/X, Wikipedia, and web crawlers
+- **Fact Verification** -- Cross-references claims across sources, assigns confidence scores, and flags contradictions
+- **LinkedIn Intelligence** -- Account pooling across 12+ accounts with session persistence, AES-256-GCM encryption, and automated email verification
+- **Personalized Introductions** -- GPT-4 synthesizes research and conversation data into tailored introductions with key talking points
+- **Event Outreach** -- Generates individualized event invitations based on each member's profile and interests
+- **Bi-Weekly Digest** -- Automated community roundup with highlights, event recaps, and new member spotlights
+- **Human-in-the-Loop Approval** -- All outgoing communications are queued in `#bot-admin` for explicit admin review before delivery
 
 ---
 
@@ -26,7 +57,7 @@ graph TD
     E --> E5[Wikipedia + Web Crawler]
 
     E1 & E2 & E3 & E4 & E5 --> F[Profile Aggregation]
-    F --> G[Quality Scoring]
+    F --> G[Quality Scoring & Fact Check]
     G --> H[AI Introduction Generation]
     H --> I[Admin Approval Queue]
     I -->|Approved| J[Personalized Outreach]
@@ -37,93 +68,50 @@ graph TD
     M & N --> I
 ```
 
-## Features
+<details>
+<summary><strong>Pipeline Stages in Detail</strong></summary>
+<br />
 
-### Conversational Onboarding
-Multi-turn GPT-4 powered intake flow that classifies new members (VC, Corporate, Community Builder, Angel) through natural conversation, then triggers the research pipeline automatically.
+| Stage | What Happens | Time |
+|-------|-------------|------|
+| **1. Data Collection** | Parallel scraping across LinkedIn, Perplexity, Tavily, Twitter, Wikipedia, and web crawlers | 30-45s |
+| **2. Citation Crawling** | Follows references from initial results to build a complete picture | 5-10s |
+| **3. Quality & Fact Check** | Cross-references claims across sources, flags contradictions | < 1s |
+| **4. Profile Aggregation** | Merges data into unified person and firm profiles with confidence scores | < 1s |
+| **5. Introduction Generation** | GPT-4 synthesizes a personalized introduction with key talking points | < 1s |
 
-### 5-Stage Research Pipeline
-1. **Data Collection** — Parallel scraping across LinkedIn, Perplexity AI, Tavily, Twitter/X, Wikipedia, and web crawlers
-2. **Citation Crawling** — Follows references from initial results to build a complete picture
-3. **Quality & Fact Checking** — Cross-references claims across sources, flags contradictions
-4. **Profile Aggregation** — Merges data into a unified professional profile with confidence scores
-5. **Introduction Generation** — GPT-4 synthesizes a personalized introduction with key talking points
-
-### LinkedIn Intelligence
-- Session persistence with 30-day cookie caching (3x fewer logins)
-- Account pooling across 12+ accounts with intelligent rotation
-- Automated email verification via Gmail IMAP
-- AES-256-GCM encrypted credential storage
-- Rate limiting (75 scrapes/day/account) with configurable cooldowns
-
-### Event Outreach
-Generates personalized event invitations for each member based on their profile and interests. Every message passes through the admin approval queue — the bot never sends unsanctioned communications.
-
-### Bi-Weekly Digest
-Automated community digest with highlights, event recaps, new member spotlights, and featured content. Scheduled delivery with admin review before distribution.
-
-### Human-in-the-Loop Approval
-All outgoing communications are drafted and queued in `#bot-admin` for explicit approval. Admins can edit, approve, or reject any message before it reaches members.
+</details>
 
 ---
 
 ## Tech Stack
 
-| Component | Technology |
-|-----------|-----------|
-| Runtime | Node.js 20+ |
-| Framework | Slack Bolt SDK (Socket Mode) |
-| AI | OpenAI GPT-4 / GPT-4o |
-| Research | Perplexity AI, Tavily, Twitter API v2, Wikipedia |
-| Database | PostgreSQL + Prisma ORM |
-| Scraping | Python Selenium + Chromium |
-| Email | Gmail IMAP (verification automation) |
-| Security | AES-256-GCM encryption |
-| Scheduling | node-cron |
-| Logging | Pino |
-| Deployment | Railway (Nixpacks) |
+<table>
+<tr>
+<td>
 
-## Project Structure
+| Layer | Technology |
+|-------|-----------|
+| **Runtime** | Node.js 20+ |
+| **Framework** | Slack Bolt SDK (Socket Mode) |
+| **AI** | OpenAI GPT-4 / GPT-4o |
+| **Database** | PostgreSQL + Prisma ORM |
 
-```
-sentinel/
-├── src/
-│   ├── index.js                  # Server initialization
-│   ├── app.js                    # Bolt app configuration
-│   ├── config/                   # Environment & settings
-│   ├── listeners/
-│   │   ├── events/               # member_joined, app_home_opened
-│   │   ├── messages/             # DM conversation handler
-│   │   ├── actions/              # Approval buttons, modals
-│   │   └── commands/             # Slash command router
-│   ├── services/
-│   │   ├── openai.js             # GPT-4 integration
-│   │   ├── database.js           # Prisma operations
-│   │   ├── slack.js              # Slack API helpers
-│   │   ├── scheduler.js          # Cron job management
-│   │   └── research/
-│   │       ├── index.js          # Pipeline orchestrator
-│   │       ├── accountPool.js    # LinkedIn account rotation
-│   │       ├── sessionManager.js # Session persistence + encryption
-│   │       ├── emailVerification.js
-│   │       ├── linkedin.js
-│   │       ├── perplexity.js
-│   │       ├── tavily.js
-│   │       ├── twitter.js
-│   │       ├── wikipedia.js
-│   │       ├── crawler.js        # Citation web crawler
-│   │       ├── aggregator.js     # Multi-source profile merger
-│   │       ├── qualityScorer.js  # Cross-reference validation
-│   │       └── introGenerator.js # AI introduction synthesis
-│   ├── prompts/                  # System prompt templates
-│   ├── templates/                # Slack Block Kit templates
-│   └── utils/
-├── prisma/
-│   └── schema.prisma             # Database schema
-├── scripts/
-│   └── scrape_linkedin.py        # Selenium scraper
-└── docs/                         # Setup & architecture guides
-```
+</td>
+<td>
+
+| Layer | Technology |
+|-------|-----------|
+| **Research** | Perplexity AI, Tavily, Twitter API v2, Wikipedia |
+| **Scraping** | Python Selenium + Chromium |
+| **Security** | AES-256-GCM encryption |
+| **Deployment** | Railway (Nixpacks) |
+
+</td>
+</tr>
+</table>
+
+---
 
 ## Quick Start
 
@@ -134,52 +122,122 @@ sentinel/
 - Slack workspace (Pro or Business+)
 - OpenAI API key
 
-### Installation
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/JiwaniZakir/sentinel.git
 cd sentinel
 npm install
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your credentials
-
-# Set up database
-npx prisma generate
-npx prisma db push
-
-# Start (Socket Mode)
-npm run dev
 ```
 
-### Slack App Setup
+### 2. Configure environment
 
-1. Create app at [api.slack.com/apps](https://api.slack.com/apps)
-2. Enable Socket Mode
-3. Add Bot Token Scopes: `channels:join`, `channels:manage`, `channels:read`, `chat:write`, `chat:write.public`, `groups:read`, `groups:write`, `im:history`, `im:read`, `im:write`, `users:read`, `users:read.email`, `commands`, `files:write`
+```bash
+cp .env.example .env
+# Edit .env with your Slack, OpenAI, and database credentials
+```
+
+### 3. Set up the database
+
+```bash
+npx prisma generate
+npx prisma db push
+```
+
+### 4. Create the Slack app
+
+1. Create an app at [api.slack.com/apps](https://api.slack.com/apps)
+2. Enable **Socket Mode**
+3. Add Bot Token Scopes:
+
+   ```
+   channels:join  channels:manage  channels:read  chat:write  chat:write.public
+   groups:read  groups:write  im:history  im:read  im:write
+   users:read  users:read.email  commands  files:write
+   ```
+
 4. Subscribe to events: `team_join`, `member_joined_channel`, `app_home_opened`, `message.im`
-5. Install to workspace
+5. Install to workspace and copy tokens to `.env`
 
-### Slash Commands
+### 5. Start the bot
+
+```bash
+# Development
+npm run dev
+
+# Production
+npm start
+```
+
+---
+
+## Slash Commands
 
 | Command | Description |
 |---------|------------|
 | `/sentinel help` | Show available commands |
-| `/sentinel intro` | Start/redo onboarding |
+| `/sentinel intro` | Start or redo onboarding |
 | `/sentinel events` | View upcoming events |
-| `/sentinel announce-event` | Create event outreach (admin) |
-| `/sentinel send-digest` | Generate community digest (admin) |
-| `/sentinel add-highlight <text>` | Add to digest (admin) |
-| `/sentinel partner-stats` | View pipeline statistics (admin) |
+| `/sentinel announce-event` | Create event outreach *(admin)* |
+| `/sentinel send-digest` | Generate community digest *(admin)* |
+| `/sentinel add-highlight <text>` | Add content to digest *(admin)* |
+| `/sentinel partner-stats` | View pipeline statistics *(admin)* |
+
+---
+
+## Project Structure
+
+```
+sentinel/
+├── src/
+│   ├── index.js                    # Server initialization
+│   ├── app.js                      # Bolt app configuration
+│   ├── config/                     # Environment & settings
+│   ├── listeners/
+│   │   ├── events/                 # member_joined, app_home_opened
+│   │   ├── messages/               # DM conversation handler
+│   │   ├── actions/                # Approval buttons, modals
+│   │   └── commands/               # Slash command router
+│   ├── services/
+│   │   ├── openai.js               # GPT-4 integration
+│   │   ├── database.js             # Prisma operations
+│   │   ├── slack.js                # Slack API helpers
+│   │   ├── scheduler.js            # Cron job management
+│   │   └── research/
+│   │       ├── index.js            # Pipeline orchestrator
+│   │       ├── accountPool.js      # LinkedIn account rotation
+│   │       ├── sessionManager.js   # Session persistence + encryption
+│   │       ├── emailVerification.js
+│   │       ├── linkedin.js
+│   │       ├── perplexity.js
+│   │       ├── tavily.js
+│   │       ├── twitter.js
+│   │       ├── wikipedia.js
+│   │       ├── crawler.js          # Citation web crawler
+│   │       ├── aggregator.js       # Multi-source profile merger
+│   │       ├── qualityScorer.js    # Cross-reference validation
+│   │       └── introGenerator.js   # AI introduction synthesis
+│   ├── prompts/                    # System prompt templates
+│   ├── templates/                  # Slack Block Kit templates
+│   └── utils/                      # Logger, validators, formatters
+├── prisma/
+│   └── schema.prisma               # Database schema (15 tables)
+├── scripts/
+│   ├── scrape_linkedin.py          # Selenium scraper
+│   └── wikipedia_search.py         # Wikipedia search utility
+└── docs/                           # Setup & architecture guides
+```
+
+---
 
 ## Research Pipeline Setup
 
-The research pipeline is optional but provides the most value. To enable LinkedIn intelligence:
+The research pipeline is optional but provides the most value. To enable full intelligence:
 
-1. Generate an encryption key: `/sentinel linkedin-generate-key`
-2. Add LinkedIn accounts to the pool (see [docs/LINKEDIN_SESSION_MANAGER_QUICKSTART.md](docs/LINKEDIN_SESSION_MANAGER_QUICKSTART.md))
-3. Configure API keys in `.env`:
+1. **Generate an encryption key** -- run `/sentinel linkedin-generate-key` in Slack
+2. **Add LinkedIn accounts** -- see the [LinkedIn Quick Start](docs/LINKEDIN_SESSION_MANAGER_QUICKSTART.md)
+3. **Configure API keys** in `.env`:
+
    ```bash
    SESSION_ENCRYPTION_KEY=<generated-key>
    PERPLEXITY_API_KEY=<key>
@@ -187,13 +245,43 @@ The research pipeline is optional but provides the most value. To enable LinkedI
    TWITTER_BEARER_TOKEN=<optional>
    ```
 
-### Documentation
+---
 
-- [Quick Start Guide](docs/LINKEDIN_SESSION_MANAGER_QUICKSTART.md) — 15-minute LinkedIn setup
-- [Research Architecture](docs/RESEARCH_ARCHITECTURE.md) — System design deep-dive
-- [Onboarding Flow](docs/ONBOARDING_FLOW_GUIDE.md) — Conversation flow documentation
-- [Production Checklist](docs/PRODUCTION_CHECKLIST.md) — Deployment guide
+## Documentation
+
+| Guide | Description |
+|-------|------------|
+| [Onboarding Flow Guide](docs/ONBOARDING_FLOW_GUIDE.md) | Complete conversation flow documentation |
+| [Research Architecture](docs/RESEARCH_ARCHITECTURE.md) | 5-stage pipeline deep-dive |
+| [LinkedIn Quick Start](docs/LINKEDIN_SESSION_MANAGER_QUICKSTART.md) | 15-minute LinkedIn setup |
+| [LinkedIn Full Setup](docs/LINKEDIN_SESSION_MANAGER_SETUP.md) | Complete account pool documentation |
+| [Production Checklist](docs/PRODUCTION_CHECKLIST.md) | Deployment guide |
+| [Twitter Setup](docs/TWITTER_SETUP.md) | Twitter API integration |
+
+---
+
+## Contributing
+
+Contributions are welcome. Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Commit your changes (`git commit -m "Add your feature"`)
+4. Push to the branch (`git push origin feature/your-feature`)
+5. Open a Pull Request
+
+Please make sure your code follows the existing style and includes appropriate error handling.
+
+---
 
 ## License
 
-MIT
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
+<div align="center">
+
+Built by [Zakir Jiwani](https://github.com/JiwaniZakir)
+
+</div>
