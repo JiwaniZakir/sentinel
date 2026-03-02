@@ -19,6 +19,12 @@ Aegis is a self-hosted personal intelligence platform built on [OpenClaw](https:
 
 All of this runs on 4 Docker containers, ~2,700 lines of custom code, with AES-256-GCM encryption for all sensitive data and a tamper-evident audit log.
 
+### What OpenClaw Provides Out of the Box
+
+[OpenClaw](https://github.com/openclaw/openclaw) ships with **53+ bundled skills** (web search, file management, code execution, memory, and more) and **24 messaging channels** (WhatsApp, Telegram, Discord, Slack, and others) built-in. It handles agent orchestration, cron scheduling, LLM calls, session memory (LanceDB), and a web-based Control UI.
+
+Aegis extends OpenClaw with **8 custom skills** (finance, calendar, LMS, health, social, content, briefing, security), **3 custom hooks** (audit-logger, pii-guard, budget-guard), and a **data-api** for encrypted persistence of personal data. You get the full power of a general-purpose AI agent platform plus domain-specific intelligence for your life.
+
 ## Architecture
 
 ```
@@ -58,6 +64,10 @@ All of this runs on 4 Docker containers, ~2,700 lines of custom code, with AES-2
 
 ## Quick Start
 
+OpenClaw can be installed via npm or run entirely through Docker. Choose the method that fits your workflow.
+
+### Method A: Docker (recommended -- includes everything)
+
 ```bash
 # 1. Clone the repository
 git clone https://github.com/JiwaniZakir/aegis.git && cd aegis
@@ -77,6 +87,32 @@ open http://localhost:18789
 ```
 
 Bootstrap automatically generates `DATA_API_TOKEN`, `ENCRYPTION_MASTER_KEY`, and `POSTGRES_PASSWORD`. You only need to add your `ANTHROPIC_API_KEY` manually.
+
+### Method B: npm (OpenClaw standalone + Aegis config/skills/hooks)
+
+If you already have OpenClaw installed or prefer to run it outside Docker:
+
+```bash
+# 1. Install OpenClaw globally
+npm install -g openclaw@latest
+
+# 2. Clone Aegis for its config, skills, hooks, and data-api
+git clone https://github.com/JiwaniZakir/aegis.git && cd aegis
+
+# 3. Run the onboarding wizard (creates config if needed)
+openclaw onboard
+
+# 4. Start the data-api and PostgreSQL via Docker
+docker compose up -d data-api postgres cloudflared
+
+# 5. Start OpenClaw gateway (reads config/ directory)
+openclaw
+
+# 6. Open the Control UI (default port 18789)
+open http://localhost:18789
+```
+
+With this method, OpenClaw runs natively on your machine while the data-api, PostgreSQL, and Cloudflare Tunnel run in Docker.
 
 For a detailed walkthrough from zero, see [docs/SETUP_FROM_SCRATCH.md](docs/SETUP_FROM_SCRATCH.md).
 

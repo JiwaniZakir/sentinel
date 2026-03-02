@@ -243,6 +243,12 @@ Skills are `SKILL.md` files that teach agents how to call data-api endpoints via
 Defined in `config/cron/jobs.json`. Agents call data-api endpoints via `web_fetch` on schedule.
 
 ### OpenClaw Config Schema Notes
+- **Config format**: `openclaw.json` supports JSON5 (trailing commas, comments allowed), not strict JSON
+- **Setup command**: `openclaw onboard` is the interactive setup wizard (not `openclaw setup`)
+- **Gateway default port**: 18789 (configurable via `gateway.bind`)
+- **Health endpoints**: `/healthz`, `/readyz`, `/health`, `/ready` (all available on the gateway)
+- **Skill loading priority**: 3 tiers — workspace skills (your `skills/` dir) > managed skills > 53+ bundled skills. Workspace skills override bundled skills of the same name.
+- **WhatsApp**: Uses Baileys library natively (no external bridge service needed)
 - `agents.defaults.thinkingDefault` — valid at defaults level only, NOT per-agent
 - `agents.list[].model` — can be string or `{primary, fallbacks}` object
 - `agents.defaults.compaction.memoryFlush` — must be `{enabled: true}`, not boolean

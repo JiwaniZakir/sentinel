@@ -35,12 +35,13 @@ This is the complete guide for going from nothing to a running Aegis instance. R
 - **Channels** for interacting with agents (WhatsApp, Telegram, web UI)
 - **Cron scheduling** for running agent tasks on a schedule
 - **Tools** like `web_fetch` (HTTP calls) and `web_search` (search engine)
-- **Skills** (Markdown files that teach agents new capabilities)
+- **Skills** (Markdown files that teach agents new capabilities) -- 53+ bundled skills ship with OpenClaw, plus you can add your own
 - **Hooks** (TypeScript functions that intercept events)
 - **Memory** (persistent agent context stored in LanceDB)
-- **A web UI** (Control UI) for managing sessions and pairing channels
+- **A Control UI** served directly from the gateway at `http://localhost:18789` for managing sessions and pairing channels
+- **Workspace bootstrap files** that inject context into agents on startup (BOOT.md, USER.md, MEMORY.md, SOUL.md, IDENTITY.md, and more)
 
-OpenClaw runs as a single Node.js process inside a Docker container. You configure it with a JSON file and extend it with skills and hooks.
+OpenClaw runs as a single Node.js process (requires Node.js >= 22.12.0). You can install it via npm, run it in a Docker container, or build from source. Configuration lives in a JSON5 file (`openclaw.json`) with hot-reload support, and you extend it with skills and hooks.
 
 ## 2. What is Aegis
 
@@ -63,11 +64,14 @@ In short: OpenClaw is the brain, Aegis is the configuration and data layer that 
 | RAM | 4 GB | 8 GB |
 | Disk | 10 GB | 20 GB |
 | OS | Any OS that runs Docker | Ubuntu 22.04+ or macOS |
+| Node.js | 22.12.0+ (only if installing OpenClaw via npm) | 22.x LTS |
 | Network | Outbound internet access | Same |
 
 You also need:
 - An Anthropic API key (costs money per API call -- roughly $1-5/day with default configuration)
 - (Optional) API credentials for any integrations you want to enable
+
+**Note:** If you use the Docker-based setup (recommended for Aegis), you do NOT need Node.js installed on the host -- it runs inside the container. Node.js is only required if you install OpenClaw globally via npm for local development.
 
 ## 4. Installing Docker
 
@@ -147,6 +151,8 @@ aegis/
 
 This command does everything needed for initial setup:
 
+0. **Clones OpenClaw** if not already present -- the script runs `git clone https://github.com/openclaw/openclaw.git` into an `openclaw/` directory at the project root. This is the Docker-based deployment path. (Alternatively, you can install OpenClaw globally with `npm install -g openclaw@latest` and run `openclaw onboard --install-daemon` for the interactive setup wizard, but the bootstrap script handles the Docker approach automatically.)
+
 1. **Generates `.env`** from `.env.example` with auto-generated secrets:
    - `DATA_API_TOKEN` -- 64-character hex token for API authentication
    - `ENCRYPTION_MASTER_KEY` -- 64-character hex key for AES-256-GCM encryption
@@ -155,7 +161,7 @@ This command does everything needed for initial setup:
 2. **Starts Docker services** by running `docker compose up -d --build`:
    - PostgreSQL 16 with pgvector extension
    - Data API (FastAPI on port 8000 internally)
-   - OpenClaw gateway (on port 18789 internally)
+   - OpenClaw gateway (default port 18789, using `ghcr.io/openclaw/openclaw` image). The gateway bind mode must be `"lan"` (not the default `"loopback"`) when running inside Docker so other containers can reach it. The bridge port is 18790.
    - Cloudflare tunnel (starts but does nothing without a tunnel token)
 
 3. **Waits for services to become healthy** (up to 60 seconds)
@@ -164,11 +170,43 @@ This command does everything needed for initial setup:
 
 After bootstrap completes, you will see next steps printed in your terminal.
 
+### Alternative: Installing OpenClaw via npm (non-Docker)
+
+If you prefer to run OpenClaw directly on the host instead of in Docker:
+
+```bash
+# Requires Node.js >= 22.12.0
+npm install -g openclaw@latest
+
+# Run the interactive setup wizard
+openclaw onboard --install-daemon
+
+# Start the gateway
+openclaw gateway
+```
+
+This installs OpenClaw globally and creates its configuration at `~/.openclaw/`. The default paths are:
+- Config: `~/.openclaw/openclaw.json` (JSON5 format with hot-reload)
+- Workspace: `~/.openclaw/workspace`
+- Credentials: `~/.openclaw/credentials/`
+- Sessions: `~/.openclaw/agents/<agentId>/sessions/`
+
+You can also build from source:
+
+```bash
+git clone https://github.com/openclaw/openclaw.git
+cd openclaw
+pnpm install
+pnpm build
+```
+
+For Aegis, the Docker approach (bootstrap.sh) is recommended because it manages all 4 services together. If you install OpenClaw via npm, you still need to run PostgreSQL, the data-api, and cloudflared separately.
+
 If bootstrap fails, see the [Troubleshooting](#18-troubleshooting) section.
 
 ## 8. Configuring Your Anthropic Key
 
-Bootstrap generates all secrets except your Anthropic API key -- that one you have to add manually.
+Bootstrap generates all Aegis-specific secrets, but OpenClaw itself needs additional environment variables. The most important one is your Anthropic API key.
 
 ```bash
 # Open .env in your preferred editor
@@ -179,6 +217,13 @@ Find this line and add your key:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
+```
+
+Other optional environment variables for OpenClaw:
+
+```
+OPENCLAW_GATEWAY_TOKEN=...        # Optional: token for authenticating API calls to the gateway
+BRAVE_API_KEY=...                  # Optional: enables web search via Brave Search API
 ```
 
 Then restart the gateway so it picks up the new key:
@@ -192,9 +237,16 @@ Verify the gateway is healthy:
 ```bash
 docker compose ps
 # openclaw-gateway should show "Up (healthy)"
+
+# You can also hit the gateway health endpoint directly
+curl -sf http://localhost:18789/healthz
 ```
 
 ## 9. Pairing WhatsApp
+
+OpenClaw uses the Baileys library (WhatsApp Web protocol) for WhatsApp integration. There are two ways to pair:
+
+### Method 1: Control UI (QR code)
 
 1. Open the Control UI in your browser: [http://localhost:18789](http://localhost:18789)
 2. The UI will display a QR code for WhatsApp pairing
@@ -204,13 +256,35 @@ docker compose ps
    - Scan the QR code on screen
 4. Once paired, the QR code disappears and you will see a connected session
 
+### Method 2: CLI pairing
+
+If you installed OpenClaw via npm (or have access to the CLI inside the container):
+
+```bash
+# Initiate WhatsApp login (displays QR in terminal)
+openclaw channels login --channel whatsapp
+
+# After scanning, check for pending pairing requests
+openclaw pairing list whatsapp
+
+# Approve a pairing request
+openclaw pairing approve whatsapp <CODE>
+```
+
+### Configuring your phone number
+
 To set your phone number for outbound messages, edit `.env`:
 
 ```
-WHATSAPP_ADMIN_PHONE=15551234567
+WHATSAPP_ADMIN_PHONE=+15551234567
 ```
 
-And update the `allowFrom` and `defaultTo` fields in `config/openclaw.json` to match your number (digits only, with country code).
+And update the `allowFrom` and `defaultTo` fields in `config/openclaw.json` to match your number. Use E.164 format with the `+` prefix (e.g., `"+15551234567"`).
+
+The WhatsApp channel is configured in `config/openclaw.json` under `channels.whatsapp`. Key settings:
+- `dmPolicy` -- controls who can message the agent. Options: `"pairing"` (default, requires approval), `"allowlist"`, `"open"`, `"disabled"`
+- `allowFrom` -- array of E.164 phone numbers allowed to interact (when using `"allowlist"` policy)
+- `defaultTo` -- phone number for outbound messages (briefings, content drafts)
 
 After making these changes:
 
@@ -406,6 +480,24 @@ This agent aggregates data from multiple sources and composes summaries delivere
 
 This agent uses web search to find trending topics, generates posts, and sends drafts to WhatsApp for your review before publishing.
 
+### Workspace bootstrap files
+
+When OpenClaw starts (or when an agent session begins), it injects context from workspace files. These files live in `config/` for Aegis:
+
+| File | Purpose |
+|------|---------|
+| `BOOT.md` | Startup orientation -- runs on every gateway restart. Tells the agent who it is and what to do. |
+| `USER.md` | User profile and preferences (your name, timezone, goals) |
+| `MEMORY.md` | Long-term curated memory that persists across sessions |
+| `SOUL.md` | Persona definition, ethical boundaries, communication tone |
+| `IDENTITY.md` | Agent name and aesthetic (how the agent introduces itself) |
+| `TOOLS.md` | Tool usage guidance (when and how to use web_fetch, web_search, etc.) |
+| `AGENTS.md` | Operating instructions and inter-agent coordination |
+| `HEARTBEAT.md` | Lightweight periodic checklist (runs on heartbeat interval) |
+| `BOOTSTRAP.md` | One-time first-run setup instructions (auto-deleted after first run) |
+
+You will primarily edit `BOOT.md`, `USER.md`, and `MEMORY.md` to customize the agent for yourself.
+
 ### Agent configuration
 
 All agents are defined in `config/openclaw.json` under the `agents` key. You can:
@@ -416,14 +508,22 @@ All agents are defined in `config/openclaw.json` under the `agents` key. You can
 
 ## 12. Understanding Skills
 
-Skills are Markdown files in `skills/` that teach agents how to use the data-api. They are NOT code -- they are instructions.
+Skills are Markdown files that teach agents how to perform tasks. They are NOT code -- they are instructions that the LLM reads and follows.
 
 Each skill has:
-- A `SKILL.md` file with YAML frontmatter (`name`, `description`)
+- A `SKILL.md` file with YAML frontmatter (`name`, `description`, `eligibility`)
 - API endpoint documentation with example `web_fetch` calls
 - Guidelines for formatting and presenting data
 
-The 8 built-in skills:
+### Skill loading (3-tier system)
+
+OpenClaw loads skills from three tiers, in priority order:
+
+1. **Workspace skills** -- Custom skills in your workspace (`skills/` in Aegis). These take highest priority.
+2. **Managed skills** -- Installed via OpenClaw package management.
+3. **Bundled skills** -- 53+ skills that ship with OpenClaw out of the box (web search, file management, memory, etc.).
+
+Aegis adds 8 workspace-level skills on top of the bundled ones:
 
 | Skill | Directory | What it teaches |
 |-------|-----------|----------------|
@@ -559,7 +659,14 @@ Edit `config/cron/jobs.json` and change the `schedule.expr` and `schedule.tz` fi
 
 ### Change agent models
 
-Edit `config/openclaw.json`. To use cheaper models everywhere:
+Edit `config/openclaw.json` directly, or use the CLI if OpenClaw is installed via npm:
+
+```bash
+openclaw config get agents.list
+openclaw config set agents.list[0].model "anthropic/claude-haiku-4-5"
+```
+
+To use cheaper models everywhere in the JSON config:
 
 ```json
 {
@@ -582,8 +689,8 @@ In `config/cron/jobs.json`, set `"enabled": false` on jobs you do not need. For 
 ### Change WhatsApp phone number
 
 Update these locations:
-1. `.env`: `WHATSAPP_ADMIN_PHONE=your-number`
-2. `config/openclaw.json`: `channels.whatsapp.allowFrom` and `channels.whatsapp.defaultTo`
+1. `.env`: `WHATSAPP_ADMIN_PHONE=+15551234567` (E.164 format)
+2. `config/openclaw.json`: `channels.whatsapp.allowFrom` and `channels.whatsapp.defaultTo` (also E.164 format, e.g., `"+15551234567"`)
 
 ## 17. Backing Up and Restoring
 
@@ -642,6 +749,17 @@ docker compose ps
 # Check health
 make health
 
+# OpenClaw built-in diagnostics (if installed via npm)
+openclaw doctor
+openclaw status
+openclaw health
+
+# Gateway health endpoints (available at http://localhost:18789)
+# /healthz  — liveness probe
+# /readyz   — readiness probe
+# /health   — detailed health info
+# /ready    — alias for readyz
+
 # View recent logs
 docker compose logs --tail=50
 ```
@@ -653,7 +771,7 @@ docker compose logs --tail=50
 | "Cannot connect to Docker daemon" | Docker not running | Start Docker Desktop or `sudo systemctl start docker` |
 | data-api shows "unhealthy" | Database not ready or migrations not run | `docker compose logs data-api` then `make migrate` |
 | Gateway crashes on start | Missing `ANTHROPIC_API_KEY` | Add key to `.env`, restart gateway |
-| WhatsApp QR code does not appear | Gateway not healthy | Check `docker compose logs openclaw-gateway` |
+| WhatsApp QR code does not appear | Gateway not healthy | Check `docker compose logs openclaw-gateway` or run `openclaw doctor` |
 | Cron jobs not firing | Jobs disabled or config error | Check `config/cron/jobs.json` for `"enabled": true` |
 | "Budget exceeded" warnings | Daily/monthly LLM limit reached | Increase limits in `.env` or reduce agent usage |
 | Integration returns 401 | Expired token | Re-authenticate and store fresh credentials |

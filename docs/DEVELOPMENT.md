@@ -395,6 +395,16 @@ Returns: `{"field": "value"}`
 
 The YAML frontmatter (`name` and `description`) is required. OpenClaw auto-discovers skills from the `skills/` directory at startup.
 
+### Skill loading priority (3 tiers)
+
+OpenClaw loads skills in a 3-tier priority order:
+
+1. **Workspace skills** -- your custom skills in the `skills/` directory (highest priority)
+2. **Managed skills** -- installed via OpenClaw's skill management commands
+3. **Bundled skills** -- 53+ skills that ship with OpenClaw (web search, file management, code execution, memory, etc.)
+
+If a workspace skill has the same name as a bundled skill, the workspace version takes precedence. Aegis's 8 custom skills (`aegis-finance`, `aegis-calendar`, etc.) are all workspace skills.
+
 Skills are limited to 65,536 bytes (configured in `openclaw.json` via `skills.limits.maxSkillFileBytes`).
 
 ## Adding a New Hook
