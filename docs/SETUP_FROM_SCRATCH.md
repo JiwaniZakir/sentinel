@@ -125,7 +125,7 @@ Estimated costs with the default Aegis configuration:
 ## 6. Cloning Aegis
 
 ```bash
-git clone https://github.com/JiwaniZakir/aegis.git
+git clone https://github.com/JiwaniZakir/sentinel.git aegis
 cd aegis
 ```
 

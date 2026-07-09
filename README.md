@@ -94,7 +94,7 @@ All data is encrypted with AES-256-GCM. All credentials are stored in an encrypt
 ### Option A: Docker (everything included)
 
 ```bash
-git clone https://github.com/JiwaniZakir/aegis.git && cd aegis
+git clone https://github.com/JiwaniZakir/sentinel.git aegis && cd aegis
 ./infrastructure/scripts/bootstrap.sh
 ```
 
@@ -112,7 +112,7 @@ Bootstrap auto-generates `DATA_API_TOKEN`, `ENCRYPTION_MASTER_KEY`, and `POSTGRE
 
 ```bash
 npm install -g openclaw@latest
-git clone https://github.com/JiwaniZakir/aegis.git && cd aegis
+git clone https://github.com/JiwaniZakir/sentinel.git aegis && cd aegis
 openclaw onboard
 docker compose up -d data-api postgres cloudflared
 openclaw

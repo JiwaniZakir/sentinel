@@ -7,7 +7,7 @@ Thank you for your interest in contributing to Aegis. This guide covers everythi
 1. Fork the repository
 2. Clone your fork:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/aegis.git
+   git clone https://github.com/YOUR_USERNAME/sentinel.git aegis
    cd aegis
    ```
 3. Run bootstrap to set up the development environment:

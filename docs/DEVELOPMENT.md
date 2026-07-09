@@ -15,7 +15,7 @@ This guide covers local development, testing, code style, and how to extend Aegi
 
 ```bash
 # Clone the repository
-git clone https://github.com/JiwaniZakir/aegis.git
+git clone https://github.com/JiwaniZakir/sentinel.git aegis
 cd aegis
 
 # Bootstrap (generates .env, starts services, runs migrations)
@@ -82,7 +82,7 @@ cd data-api && uv run pytest --cov=app --cov-report=term-missing
 cd data-api && uv run pytest -q
 ```
 
-The test suite has 113 tests. Tests that require a running PostgreSQL instance will automatically skip when the database is unavailable. This is by design -- CI runs without a database, and the tests still provide value.
+The test suite has 113 tests. Tests that require a running PostgreSQL instance will automatically skip when the database is unavailable, so the suite still provides value locally without one. In CI, the `test` job provisions a PostgreSQL (pgvector) service container and runs migrations first, so the full suite runs there.
 
 Key test files:
 - `tests/conftest.py` -- shared fixtures, sets environment variables before app import
@@ -128,7 +128,7 @@ Test files are exempt from `S101` (assert), `S105` (hardcoded passwords), `S106`
 
 ### TypeScript (hooks)
 
-Hooks are TypeScript files in `hooks/<name>/handler.ts`. They follow standard TypeScript conventions. No separate linter is configured for hooks -- they are compiled by OpenClaw at runtime.
+Hooks are TypeScript files in `hooks/<name>/handler.ts`. They follow standard TypeScript conventions. No separate linter is configured for hooks -- CI type-checks them with `tsc --noEmit`, and they are compiled by OpenClaw at runtime.
 
 ### Conventional Commits
 
@@ -530,7 +530,8 @@ The GitHub Actions CI pipeline (`.github/workflows/ci.yml`) runs on every push t
 | Job | What it does |
 |-----|-------------|
 | `lint` | Installs deps, runs `ruff check` and `ruff format --check` |
-| `test` | Installs deps, runs `pytest` with JUnit XML output |
+| `hooks-check` | Type-checks the TypeScript hooks with `tsc --noEmit` |
+| `test` | Starts a PostgreSQL (pgvector) service, runs Alembic migrations, runs `pytest` with coverage and JUnit XML output |
 | `docker-build` | Validates Docker Compose config, builds the data-api Docker image |
 | `security-scan` | Runs Trivy vulnerability scanner on the Docker image (fails on HIGH/CRITICAL) |
 

@@ -283,7 +283,7 @@ These steps assume a working OpenClaw installation (see Part 3).
 ### Step 1: Clone the Aegis Repository
 
 ```bash
-git clone https://github.com/your-org/aegis.git ~/aegis
+git clone https://github.com/your-org/sentinel.git ~/aegis
 ```
 
 ### Step 2: Copy Skills
