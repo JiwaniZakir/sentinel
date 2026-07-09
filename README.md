@@ -6,6 +6,7 @@
     Self-hosted AI agents that connect your finances, calendar, academics, health, and social media — then deliver actionable insights over WhatsApp.
   </p>
   <p align="center">
+    <a href="https://github.com/JiwaniZakir/sentinel/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/JiwaniZakir/sentinel/ci.yml?branch=main&style=flat-square&label=CI" alt="CI" /></a>
     <a href="https://python.org/"><img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" /></a>
     <a href="https://docker.com/"><img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" /></a>
     <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL-16+-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" /></a>
