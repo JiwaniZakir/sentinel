@@ -6,6 +6,7 @@
     Self-hosted AI agents that connect your finances, calendar, academics, health, and social media — then deliver actionable insights over WhatsApp.
   </p>
   <p align="center">
+    <a href="https://github.com/JiwaniZakir/sentinel/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/JiwaniZakir/sentinel/ci.yml?branch=main&style=flat-square&label=CI" alt="CI" /></a>
     <a href="https://python.org/"><img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" /></a>
     <a href="https://docker.com/"><img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" /></a>
     <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL-16+-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" /></a>
@@ -93,7 +94,7 @@ All data is encrypted with AES-256-GCM. All credentials are stored in an encrypt
 ### Option A: Docker (everything included)
 
 ```bash
-git clone https://github.com/JiwaniZakir/aegis.git && cd aegis
+git clone https://github.com/JiwaniZakir/sentinel.git aegis && cd aegis
 ./infrastructure/scripts/bootstrap.sh
 ```
 
@@ -111,7 +112,7 @@ Bootstrap auto-generates `DATA_API_TOKEN`, `ENCRYPTION_MASTER_KEY`, and `POSTGRE
 
 ```bash
 npm install -g openclaw@latest
-git clone https://github.com/JiwaniZakir/aegis.git && cd aegis
+git clone https://github.com/JiwaniZakir/sentinel.git aegis && cd aegis
 openclaw onboard
 docker compose up -d data-api postgres cloudflared
 openclaw

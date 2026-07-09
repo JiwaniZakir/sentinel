@@ -39,6 +39,7 @@ def test_async_database_url():
         postgres_user="myuser",
         postgres_password="mypass",
         postgres_db="mydb",
+        database_url="",  # a DATABASE_URL env var (e.g. in CI) must not shadow the components
     )
     assert "myuser:mypass" in s.async_database_url
     assert "mydb" in s.async_database_url

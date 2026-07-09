@@ -18,9 +18,17 @@ os.environ.setdefault(
 )
 os.environ.setdefault("POSTGRES_PASSWORD", "test")
 
+from app.database import engine  # noqa: E402
 from app.main import app  # noqa: E402
 
 AUTH_HEADER = {"Authorization": "Bearer test_data_api_token_0123456789abcdef"}
+
+
+@pytest.fixture(scope="session", autouse=True)
+async def _dispose_engine():
+    """Close pooled DB connections on the session loop before it shuts down."""
+    yield
+    await engine.dispose()
 
 
 @pytest.fixture

@@ -32,7 +32,7 @@ Log out and back in for the group change to take effect.
 ## 3. Clone and Bootstrap
 
 ```bash
-git clone https://github.com/JiwaniZakir/aegis.git
+git clone https://github.com/JiwaniZakir/sentinel.git aegis
 cd aegis
 
 # Bootstrap generates secrets, starts services, runs migrations
